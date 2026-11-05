@@ -623,10 +623,70 @@ with col_agendamento:
             "Escolha o serviço, profissional, data e horário."
         )
 
-        servico = st.selectbox(
-            "Selecione o serviço",
-            list(SERVICOS.keys())
-        )
+        st.markdown("### ✂️ Escolha seus serviços")
+st.caption("Você pode selecionar mais de um serviço.")
+
+if "servicos_selecionados" not in st.session_state:
+    st.session_state.servicos_selecionados = []
+
+colunas_servicos = st.columns(2)
+
+for indice, (nome, dados) in enumerate(SERVICOS.items()):
+    selecionado = nome in st.session_state.servicos_selecionados
+
+    with colunas_servicos[indice % 2]:
+        with st.container(border=True):
+            st.markdown(
+                f"### {dados['icone']} {nome}"
+            )
+
+            st.caption(dados["descricao"])
+
+            st.markdown(
+                f"**:orange[{moeda(dados['preco'])}]**"
+            )
+
+            st.caption(f"{dados['duracao']} minutos")
+
+            if st.button(
+                "✓ Selecionado" if selecionado else "+ Adicionar",
+                key=f"servico_{indice}",
+                use_container_width=True,
+                type="primary" if selecionado else "secondary"
+            ):
+                if selecionado:
+                    st.session_state.servicos_selecionados.remove(nome)
+                else:
+                    st.session_state.servicos_selecionados.append(nome)
+
+                st.rerun()
+
+servicos_selecionados = st.session_state.servicos_selecionados
+
+if not servicos_selecionados:
+    st.info("Selecione pelo menos um serviço para continuar.")
+    st.stop()
+
+# Soma dos valores e das durações
+valor_total = sum(
+    SERVICOS[nome]["preco"]
+    for nome in servicos_selecionados
+)
+
+duracao = sum(
+    SERVICOS[nome]["duracao"]
+    for nome in servicos_selecionados
+)
+
+servico = " + ".join(servicos_selecionados)
+
+st.success(
+    f"Serviços selecionados: {len(servicos_selecionados)}"
+)
+
+st.markdown(f"**Serviços:** {servico}")
+st.markdown(f"**Duração total:** {duracao} minutos")
+st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
 
         profissional = st.selectbox(
             "Escolha o profissional",
