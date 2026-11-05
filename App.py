@@ -1002,33 +1002,7 @@ with col_agendamento:
                         st.error(mensagem)
 
 
-# ============================================================
-# BENEFÍCIOS E INFORMAÇÕES
-# ============================================================
 
-with col_informacoes:
-
-    with st.container(border=True):
-
-        st.markdown("## ✓ Por que agendar conosco?")
-
-        beneficios = [
-            ("★", "Atendimento profissional"),
-            ("✦", "Qualidade e atenção aos detalhes"),
-            ("◷", "Pontualidade no atendimento"),
-            ("✂", "Estilo personalizado"),
-            ("♛", "Ambiente agradável")
-        ]
-
-        for icone, descricao in beneficios:
-
-            st.markdown(
-                f"**:orange[{icone}]** {descricao}"
-            )
-
-        st.divider()
-
-        st.markdown("### Cuide do seu visual!")
 
         st.write(
             "Reserve seu horário de forma rápida e prática."
