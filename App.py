@@ -692,27 +692,7 @@ with col_beneficios:
             unsafe_allow_html=True
         )
 
-    st.markdown("""
-        <div style="
-            color:#eab344;
-            font-size:25px;
-            font-weight:800;
-            text-align:center;
-            padding:22px 5px 10px;
-        ">
-            Cuide do seu visual!
-        </div>
-
-        <div style="
-            text-align:center;
-            color:#bbbbbb;
-            font-size:13px;
-            padding-bottom:12px;
-        ">
-            Reserve seu horário de forma rápida e prática.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+   st.caption("Reserve seu horário de forma rápida e prática.")
 
     st.markdown("""
     <div class="panel">
