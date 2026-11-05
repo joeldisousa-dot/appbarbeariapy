@@ -1,10 +1,12 @@
 
 import streamlit as st
 import requests
-from datetime import datetime, date, time, timedelta
+import re
+
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
-import re
+
 
 # ============================================================
 # CONFIGURAÇÕES
@@ -17,9 +19,10 @@ TZ = ZoneInfo("America/Sao_Paulo")
 DIAS_A_FRENTE = 14
 PASSO_MIN = 30
 
-# Substitua pelo WhatsApp real da barbearia.
-# Formato: código do país + DDD + número, somente números.
+# Substitua pelo número real da barbearia.
+# Formato: 55 + DDD + número, somente dígitos.
 WHATSAPP_PADRAO = "5531999999999"
+
 
 # ============================================================
 # SERVIÇOS
@@ -58,6 +61,7 @@ SERVICOS = {
     }
 }
 
+
 # ============================================================
 # PROFISSIONAIS
 # ============================================================
@@ -72,6 +76,7 @@ PROFISSIONAIS = {
     }
 }
 
+
 # ============================================================
 # CONFIGURAÇÃO STREAMLIT
 # ============================================================
@@ -82,6 +87,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
 
 # ============================================================
 # CSS
@@ -141,39 +147,6 @@ p, label, span {
     letter-spacing: 4px;
 }
 
-.service-card {
-    background: #1d1d1d;
-    border: 1px solid #49402d;
-    border-radius: 14px;
-    padding: 18px 10px;
-    min-height: 165px;
-    text-align: center;
-}
-
-.service-icon {
-    font-size: 32px;
-}
-
-.service-name {
-    color: #ffffff;
-    font-size: 15px;
-    font-weight: 700;
-    margin-top: 8px;
-}
-
-.service-description {
-    color: #aaaaaa;
-    font-size: 11px;
-    margin-top: 5px;
-}
-
-.service-price {
-    color: #eab344;
-    font-size: 21px;
-    font-weight: 800;
-    margin-top: 10px;
-}
-
 div[data-testid="stVerticalBlockBorderWrapper"] {
     border-color: #51432b;
     border-radius: 14px;
@@ -221,12 +194,23 @@ hr {
     padding: 25px 0 5px 0;
 }
 
-div[data-testid="stAlert"] {
-    border-radius: 10px;
+.service-selected {
+    border: 1px solid #eab344;
+    background: #292317;
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.service-unselected {
+    border: 1px solid #49402d;
+    background: #1d1d1d;
+    border-radius: 12px;
+    padding: 12px;
 }
 
 </style>
 """, unsafe_allow_html=True)
+
 
 # ============================================================
 # CONFIGURAÇÃO DA API
@@ -244,6 +228,7 @@ if not SCRIPT_URL:
     )
     st.stop()
 
+
 # ============================================================
 # FUNÇÕES AUXILIARES
 # ============================================================
@@ -253,12 +238,12 @@ def agora():
 
 
 def minutos(horario):
-    h, m = map(int, horario.split(":")[:2])
+    h, m = map(int, str(horario)[:5].split(":"))
     return h * 60 + m
 
 
 def formatar_hora(valor):
-    if isinstance(valor, time):
+    if isinstance(valor, datetime):
         return valor.strftime("%H:%M")
 
     texto = str(valor).strip()
@@ -270,6 +255,9 @@ def formatar_hora(valor):
 
 
 def formatar_data(valor):
+    if isinstance(valor, datetime):
+        return valor.date()
+
     if isinstance(valor, date):
         return valor
 
@@ -292,7 +280,12 @@ def formatar_data(valor):
 
 
 def moeda(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return (
+        f"R$ {valor:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
 
 
 def telefone_valido(numero):
@@ -309,8 +302,22 @@ def sobrepoe(inicio1, fim1, inicio2, fim2):
     return inicio1 < fim2 and inicio2 < fim1
 
 
+def calcular_valores(servicos):
+    valor = sum(
+        SERVICOS[nome]["preco"]
+        for nome in servicos
+    )
+
+    duracao = sum(
+        SERVICOS[nome]["duracao"]
+        for nome in servicos
+    )
+
+    return valor, duracao
+
+
 # ============================================================
-# BUSCAR RESERVAS NO GOOGLE SHEETS
+# BUSCAR RESERVAS
 # ============================================================
 
 @st.cache_data(ttl=15, show_spinner=False)
@@ -352,13 +359,14 @@ def buscar_reservas():
 
 
 # ============================================================
-# VERIFICAR HORÁRIOS OCUPADOS
+# RESERVAS DO DIA
 # ============================================================
 
 def reservas_do_dia(reservas, dia, profissional):
     resultado = []
 
     for reserva in reservas:
+
         data_reserva = formatar_data(
             reserva.get("data", "")
         )
@@ -399,10 +407,11 @@ def reservas_do_dia(reservas, dia, profissional):
 
 
 # ============================================================
-# GERAR HORÁRIOS DISPONÍVEIS
+# HORÁRIOS DISPONÍVEIS
 # ============================================================
 
 def horarios_livres(dia, profissional, duracao, reservas):
+
     configuracao = PROFISSIONAIS[profissional]
 
     if dia.weekday() not in configuracao["dias"]:
@@ -429,12 +438,12 @@ def horarios_livres(dia, profissional, duracao, reservas):
         fim_expediente,
         PASSO_MIN
     ):
+
         fim = inicio + duracao
 
         if fim > fim_expediente:
             continue
 
-        # Não permite agendamento durante o almoço.
         if sobrepoe(
             inicio,
             fim,
@@ -443,16 +452,21 @@ def horarios_livres(dia, profissional, duracao, reservas):
         ):
             continue
 
-        # Não permite horários que já passaram.
         if dia == atual.date():
-            horario_atual = atual.hour * 60 + atual.minute
+            horario_atual = (
+                atual.hour * 60 + atual.minute
+            )
 
             if inicio <= horario_atual:
                 continue
 
-        # Verifica conflitos com reservas existentes.
         conflito = any(
-            sobrepoe(inicio, fim, ocupado_inicio, ocupado_fim)
+            sobrepoe(
+                inicio,
+                fim,
+                ocupado_inicio,
+                ocupado_fim
+            )
             for ocupado_inicio, ocupado_fim in ocupados
         )
 
@@ -468,7 +482,7 @@ def horarios_livres(dia, profissional, duracao, reservas):
 
 
 # ============================================================
-# ENVIAR AGENDAMENTO PARA GOOGLE APPS SCRIPT
+# SALVAR AGENDAMENTO
 # ============================================================
 
 def salvar_agendamento(
@@ -480,6 +494,7 @@ def salvar_agendamento(
     telefone,
     duracao
 ):
+
     dados = {
         "data": dia.isoformat(),
         "hora": horario,
@@ -491,6 +506,7 @@ def salvar_agendamento(
     }
 
     try:
+
         resposta = requests.post(
             SCRIPT_URL,
             json=dados,
@@ -529,8 +545,6 @@ def salvar_agendamento(
         if sucesso is False:
             return False, mensagem
 
-        # Aceita respostas de sucesso sem campo explícito,
-        # desde que o servidor não tenha informado erro.
         erro = retorno.get("erro", retorno.get("error"))
 
         if erro:
@@ -546,6 +560,17 @@ def salvar_agendamento(
 
     except requests.exceptions.RequestException as erro:
         return False, f"Erro ao enviar agendamento: {erro}"
+
+
+# ============================================================
+# ESTADO DA SELEÇÃO DOS SERVIÇOS
+# ============================================================
+
+if "servicos_selecionados" not in st.session_state:
+    st.session_state.servicos_selecionados = []
+
+if "confirmacao_pendente" not in st.session_state:
+    st.session_state.confirmacao_pendente = False
 
 
 # ============================================================
@@ -567,20 +592,32 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # ============================================================
-# SERVIÇOS
+# SERVIÇOS - BOTÕES MULTIPLA SELEÇÃO
 # ============================================================
 
 st.markdown("## ✂️ Nossos Serviços")
-st.caption("Qualidade e estilo para você ficar ainda melhor!")
+
+st.caption(
+    "Escolha um ou mais serviços. "
+    "O valor e a duração serão calculados automaticamente."
+)
 
 colunas = st.columns(5)
 
-for coluna, (nome, dados) in zip(colunas, SERVICOS.items()):
-    with coluna:
+for indice, (nome, dados) in enumerate(SERVICOS.items()):
+
+    selecionado = (
+        nome in st.session_state.servicos_selecionados
+    )
+
+    with colunas[indice]:
+
         with st.container(border=True):
+
             st.markdown(
-                f"<div style='text-align:center;font-size:32px;'>{dados['icone']}</div>",
+                f"<div style='text-align:center;font-size:34px;'>{dados['icone']}</div>",
                 unsafe_allow_html=True
             )
 
@@ -595,10 +632,78 @@ for coluna, (nome, dados) in zip(colunas, SERVICOS.items()):
             )
 
             st.caption(
-                f"Duração: {dados['duracao']} minutos"
+                f"{dados['duracao']} minutos"
             )
 
+            if st.button(
+                "✓ Selecionado" if selecionado else "+ Adicionar",
+                key=f"servico_{indice}",
+                use_container_width=True,
+                type="primary" if selecionado else "secondary"
+            ):
+
+                if selecionado:
+                    st.session_state.servicos_selecionados.remove(nome)
+                else:
+                    st.session_state.servicos_selecionados.append(nome)
+
+                st.rerun()
+
+
+# ============================================================
+# RESUMO DOS SERVIÇOS SELECIONADOS
+# ============================================================
+
+servicos_selecionados = (
+    st.session_state.servicos_selecionados
+)
+
+if servicos_selecionados:
+
+    valor_total, duracao = calcular_valores(
+        servicos_selecionados
+    )
+
+    servico = " + ".join(servicos_selecionados)
+
+    with st.container(border=True):
+
+        st.markdown("### 🧾 Resumo dos serviços")
+
+        for nome in servicos_selecionados:
+            dados = SERVICOS[nome]
+
+            st.write(
+                f"{dados['icone']} **{nome}** — "
+                f"{moeda(dados['preco'])} "
+                f"({dados['duracao']} min)"
+            )
+
+        st.divider()
+
+        col_valor, col_duracao = st.columns(2)
+
+        with col_valor:
+            st.metric(
+                "Valor total",
+                moeda(valor_total)
+            )
+
+        with col_duracao:
+            st.metric(
+                "Duração total",
+                f"{duracao} min"
+            )
+
+else:
+
+    st.info(
+        "Selecione pelo menos um serviço para continuar."
+    )
+
+
 st.divider()
+
 
 # ============================================================
 # ÁREA PRINCIPAL
@@ -608,6 +713,7 @@ col_agendamento, col_informacoes = st.columns(
     [1.7, 1],
     gap="large"
 )
+
 
 # ============================================================
 # AGENDAMENTO
@@ -620,73 +726,8 @@ with col_agendamento:
         st.markdown("## 📅 Agende seu horário")
 
         st.write(
-            "Escolha o serviço, profissional, data e horário."
+            "Informe seus dados e escolha uma data e horário."
         )
-
-        st.markdown("### ✂️ Escolha seus serviços")
-st.caption("Você pode selecionar mais de um serviço.")
-
-if "servicos_selecionados" not in st.session_state:
-    st.session_state.servicos_selecionados = []
-
-colunas_servicos = st.columns(2)
-
-for indice, (nome, dados) in enumerate(SERVICOS.items()):
-    selecionado = nome in st.session_state.servicos_selecionados
-
-    with colunas_servicos[indice % 2]:
-        with st.container(border=True):
-            st.markdown(
-                f"### {dados['icone']} {nome}"
-            )
-
-            st.caption(dados["descricao"])
-
-            st.markdown(
-                f"**:orange[{moeda(dados['preco'])}]**"
-            )
-
-            st.caption(f"{dados['duracao']} minutos")
-
-            if st.button(
-                "✓ Selecionado" if selecionado else "+ Adicionar",
-                key=f"servico_{indice}",
-                use_container_width=True,
-                type="primary" if selecionado else "secondary"
-            ):
-                if selecionado:
-                    st.session_state.servicos_selecionados.remove(nome)
-                else:
-                    st.session_state.servicos_selecionados.append(nome)
-
-                st.rerun()
-
-servicos_selecionados = st.session_state.servicos_selecionados
-
-if not servicos_selecionados:
-    st.info("Selecione pelo menos um serviço para continuar.")
-    st.stop()
-
-# Soma dos valores e das durações
-valor_total = sum(
-    SERVICOS[nome]["preco"]
-    for nome in servicos_selecionados
-)
-
-duracao = sum(
-    SERVICOS[nome]["duracao"]
-    for nome in servicos_selecionados
-)
-
-servico = " + ".join(servicos_selecionados)
-
-st.success(
-    f"Serviços selecionados: {len(servicos_selecionados)}"
-)
-
-st.markdown(f"**Serviços:** {servico}")
-st.markdown(f"**Duração total:** {duracao} minutos")
-st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
 
         profissional = st.selectbox(
             "Escolha o profissional",
@@ -694,13 +735,17 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
         )
 
         hoje = agora().date()
-        ultima_data = hoje + timedelta(days=DIAS_A_FRENTE)
+
+        ultima_data = hoje + timedelta(
+            days=DIAS_A_FRENTE
+        )
 
         dias_validos = [
             hoje + timedelta(days=i)
             for i in range(DIAS_A_FRENTE + 1)
-            if (hoje + timedelta(days=i)).weekday()
-            in PROFISSIONAIS[profissional]["dias"]
+            if (
+                hoje + timedelta(days=i)
+            ).weekday() in PROFISSIONAIS[profissional]["dias"]
         ]
 
         if not dias_validos:
@@ -714,33 +759,47 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
             max_value=ultima_data
         )
 
+        horario = None
+        horarios = []
+
         if dia.weekday() not in PROFISSIONAIS[profissional]["dias"]:
+
             st.warning(
                 "O profissional não atende nesta data. "
                 "Escolha outro dia."
             )
-            st.stop()
 
-        duracao = SERVICOS[servico]["duracao"]
+        elif not servicos_selecionados:
 
-        try:
-            with st.spinner("Consultando horários disponíveis..."):
-                reservas = buscar_reservas()
+            st.info(
+                "Primeiro selecione pelo menos um serviço."
+            )
 
-        except RuntimeError as erro:
-            st.error(str(erro))
-            st.stop()
+        else:
 
-        horarios = horarios_livres(
-            dia,
-            profissional,
-            duracao,
-            reservas
-        )
+            try:
+
+                with st.spinner(
+                    "Consultando horários disponíveis..."
+                ):
+
+                    reservas = buscar_reservas()
+
+                horarios = horarios_livres(
+                    dia,
+                    profissional,
+                    duracao,
+                    reservas
+                )
+
+            except RuntimeError as erro:
+
+                st.error(str(erro))
 
         if horarios:
+
             st.success(
-                f"{len(horarios)} horário(s) disponível(is) para esta data."
+                f"{len(horarios)} horário(s) disponível(is)."
             )
 
             horario = st.selectbox(
@@ -748,8 +807,10 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
                 horarios
             )
 
-        else:
-            horario = None
+        elif (
+            dia.weekday() in PROFISSIONAIS[profissional]["dias"]
+            and servicos_selecionados
+        ):
 
             st.warning(
                 "Não há horários disponíveis nesta data. "
@@ -775,41 +836,62 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
 
         st.markdown("### 🧾 Resumo do agendamento")
 
-        st.write(f"**Serviço:** {servico}")
-        st.write(f"**Profissional:** {profissional}")
-        st.write(f"**Data:** {dia.strftime('%d/%m/%Y')}")
-        st.write(f"**Horário:** {horario or 'Não selecionado'}")
-        st.write(f"**Duração:** {duracao} minutos")
+        st.write(
+            f"**Serviços:** {servico if servicos_selecionados else 'Não selecionados'}"
+        )
+
+        st.write(
+            f"**Profissional:** {profissional}"
+        )
+
+        st.write(
+            f"**Data:** {dia.strftime('%d/%m/%Y')}"
+        )
+
+        st.write(
+            f"**Horário:** {horario or 'Não selecionado'}"
+        )
+
+        st.write(
+            f"**Duração total:** "
+            f"{f'{duracao} minutos' if servicos_selecionados else 'Não definida'}"
+        )
 
         st.markdown(
-            f"### :orange[Valor: {moeda(SERVICOS[servico]['preco'])}]"
+            f"### :orange[Valor total: {moeda(valor_total) if servicos_selecionados else 'R$ 0,00'}]"
         )
 
         confirmar = st.button(
             "✅ CONFIRMAR AGENDAMENTO",
             use_container_width=True,
-            disabled=not horarios
+            disabled=(
+                not servicos_selecionados
+                or not horarios
+                or not horario
+            )
         )
 
         if confirmar:
 
             if not cliente.strip():
-                st.error("Informe seu nome completo.")
+
+                st.error(
+                    "Informe seu nome completo."
+                )
 
             elif not telefone_valido(telefone):
+
                 st.error(
                     "Informe um telefone válido com DDD."
                 )
 
-            elif not horario:
-                st.error("Selecione um horário.")
-
             else:
 
-                # Atualiza a agenda antes de enviar.
+                # Atualiza a agenda antes de tentar gravar.
                 buscar_reservas.clear()
 
                 try:
+
                     reservas_atualizadas = buscar_reservas()
 
                     horarios_atualizados = horarios_livres(
@@ -820,17 +902,22 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
                     )
 
                 except RuntimeError as erro:
+
                     st.error(str(erro))
                     horarios_atualizados = []
 
                 if horario not in horarios_atualizados:
+
                     st.error(
                         "Este horário acabou de ser reservado. "
-                        "Escolha outro horário disponível."
+                        "Escolha outro horário."
                     )
 
                 else:
-                    with st.spinner("Confirmando seu agendamento..."):
+
+                    with st.spinner(
+                        "Confirmando seu agendamento..."
+                    ):
 
                         sucesso, mensagem = salvar_agendamento(
                             dia=dia,
@@ -850,26 +937,50 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
                             "Agendamento registrado com sucesso!"
                         )
 
-                        st.markdown("### 🎉 Agendamento confirmado")
+                        st.balloons()
 
-                        st.write(f"**Cliente:** {cliente}")
-                        st.write(f"**Serviço:** {servico}")
-                        st.write(f"**Data:** {dia.strftime('%d/%m/%Y')}")
-                        st.write(f"**Horário:** {horario}")
-                        st.write(f"**Profissional:** {profissional}")
+                        st.markdown(
+                            "### 🎉 Agendamento confirmado"
+                        )
+
                         st.write(
-                            f"**Valor:** {moeda(SERVICOS[servico]['preco'])}"
+                            f"**Cliente:** {cliente}"
+                        )
+
+                        st.write(
+                            f"**Serviços:** {servico}"
+                        )
+
+                        st.write(
+                            f"**Data:** {dia.strftime('%d/%m/%Y')}"
+                        )
+
+                        st.write(
+                            f"**Horário:** {horario}"
+                        )
+
+                        st.write(
+                            f"**Profissional:** {profissional}"
+                        )
+
+                        st.write(
+                            f"**Duração:** {duracao} minutos"
+                        )
+
+                        st.write(
+                            f"**Valor total:** {moeda(valor_total)}"
                         )
 
                         mensagem_whatsapp = (
                             f"Olá! Meu agendamento na {NOME_BARBEARIA} "
                             f"foi registrado.\n\n"
                             f"Nome: {cliente}\n"
-                            f"Serviço: {servico}\n"
+                            f"Serviços: {servico}\n"
                             f"Data: {dia.strftime('%d/%m/%Y')}\n"
                             f"Horário: {horario}\n"
                             f"Profissional: {profissional}\n"
-                            f"Valor: {moeda(SERVICOS[servico]['preco'])}"
+                            f"Duração: {duracao} minutos\n"
+                            f"Valor total: {moeda(valor_total)}"
                         )
 
                         link_whatsapp = gerar_whatsapp(
@@ -883,12 +994,16 @@ st.markdown(f"### :orange[Total: {moeda(valor_total)}]")
                             use_container_width=True
                         )
 
+                        # Limpa a seleção após o registro.
+                        st.session_state.servicos_selecionados = []
+
                     else:
+
                         st.error(mensagem)
 
 
 # ============================================================
-# INFORMAÇÕES E BENEFÍCIOS
+# BENEFÍCIOS E INFORMAÇÕES
 # ============================================================
 
 with col_informacoes:
@@ -906,13 +1021,15 @@ with col_informacoes:
         ]
 
         for icone, descricao in beneficios:
+
             st.markdown(
-                f"**:orange[{icone}]**  {descricao}"
+                f"**:orange[{icone}]** {descricao}"
             )
 
         st.divider()
 
         st.markdown("### Cuide do seu visual!")
+
         st.write(
             "Reserve seu horário de forma rápida e prática."
         )
