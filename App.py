@@ -1,151 +1,864 @@
+
+import html
 import requests
 import streamlit as st
+
 from datetime import datetime, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-# ================== CONFIGURAÇÃO ==================
-NOME_BARBEARIA = "Barbearia do Zé"
+
+# =========================================================
+# CONFIGURAÇÕES DA BARBEARIA
+# =========================================================
+
+NOME_BARBEARIA = "Barbearia Joel"
 TZ = ZoneInfo("America/Sao_Paulo")
+
 DIAS_A_FRENTE = 14
-PASSO_MIN = 30  # intervalo entre os horários exibidos
+PASSO_MIN = 30
 
-# serviço: duração em minutos
+# Altere os preços conforme os valores reais da barbearia.
+# duração em minutos e preço em reais.
 SERVICOS = {
-    "Corte": 30,
-    "Barba": 30,
-    "Corte + Barba": 60,
-    "Sobrancelha": 15,
+    "Corte Masculino": {
+        "duracao": 30,
+        "preco": 50.00,
+        "icone": "✂️",
+        "descricao": "Estilo e precisão"
+    },
+    "Barba": {
+        "duracao": 30,
+        "preco": 40.00,
+        "icone": "🧔",
+        "descricao": "Modelagem perfeita"
+    },
+    "Corte Infantil": {
+        "duracao": 30,
+        "preco": 40.00,
+        "icone": "👦",
+        "descricao": "Cuidado especial"
+    },
+    "Corte + Barba": {
+        "duracao": 60,
+        "preco": 80.00,
+        "icone": "💈",
+        "descricao": "Visual completo"
+    },
+    "Desenho no Cabelo": {
+        "duracao": 30,
+        "preco": 30.00,
+        "icone": "🎨",
+        "descricao": "Personalize seu estilo"
+    },
 }
 
-# WhatsApp (com 55 + DDD, só números) que recebe a confirmação
-WHATSAPP_PADRAO = "5511999999999"
+# Número de WhatsApp que receberá a mensagem.
+# Informe DDI + DDD + número, somente números.
+WHATSAPP_PADRAO = "5531999999999"
 
-# dias: 0=segunda ... 6=domingo | "whatsapp" é opcional (número do profissional)
+# Configuração dos profissionais.
+# 0=segunda, 1=terça, 2=quarta, 3=quinta,
+# 4=sexta, 5=sábado, 6=domingo.
 PROFISSIONAIS = {
-    "João":   {"dias": [1, 2, 3, 4, 5], "inicio": "09:00", "fim": "19:00",
-               "almoco": ("12:00", "13:00"), "whatsapp": "5511999999999"},
-    "Carlos": {"dias": [2, 3, 4, 5], "inicio": "10:00", "fim": "20:00",
-               "almoco": ("13:00", "14:00")},
+    "Joel": {
+        "dias": [0, 1, 2, 3, 4, 5],
+        "inicio": "09:00",
+        "fim": "19:00",
+        "almoco": ("12:00", "13:00"),
+        "whatsapp": WHATSAPP_PADRAO
+    }
 }
-# ==================================================
 
-SCRIPT_URL = st.secrets["SCRIPT_URL"]
-TOKEN = st.secrets.get("TOKEN", "")
-DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+DIAS_SEMANA = [
+    "segunda", "terça", "quarta",
+    "quinta", "sexta", "sábado", "domingo"
+]
 
-st.set_page_config(page_title=f"Agendar | {NOME_BARBEARIA}", page_icon="💈", layout="centered")
+# =========================================================
+# CONFIGURAÇÃO DO STREAMLIT
+# =========================================================
 
+st.set_page_config(
+    page_title="Barbearia Joel | Agendamento",
+    page_icon="💈",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+SCRIPT_URL = st.secrets.get("SCRIPT_URL", "")
+
+if not SCRIPT_URL:
+    st.error(
+        "A URL do Google Apps Script não foi configurada. "
+        "Acesse Manage app → Settings → Secrets."
+    )
+    st.stop()
+
+
+# =========================================================
+# IDENTIDADE VISUAL
+# =========================================================
+
+st.markdown("""
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Montserrat', sans-serif;
+}
+
+.stApp {
+    background:
+        radial-gradient(circle at top, #252525 0%, #101010 48%, #080808 100%);
+    color: #ffffff;
+}
+
+header[data-testid="stHeader"] {
+    background: transparent;
+}
+
+.block-container {
+    max-width: 1250px;
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+}
+
+h1, h2, h3, p, label {
+    color: #ffffff;
+}
+
+.gold {
+    color: #eab344;
+}
+
+.hero {
+    background:
+        linear-gradient(110deg, rgba(0,0,0,.96), rgba(24,24,24,.88)),
+        radial-gradient(circle at right, #6b4815, #111);
+    border: 1px solid #61471d;
+    border-radius: 20px;
+    padding: 36px 25px;
+    text-align: center;
+    margin-bottom: 30px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+}
+
+.hero-logo {
+    font-size: 48px;
+    margin-bottom: 5px;
+}
+
+.hero h1 {
+    font-size: 43px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: 2px;
+}
+
+.hero h1 span {
+    color: #eab344;
+}
+
+.hero p {
+    color: #d0d0d0;
+    font-size: 15px;
+    margin-top: 12px;
+    letter-spacing: 2px;
+}
+
+.section-title {
+    font-size: 25px;
+    font-weight: 800;
+    margin: 25px 0 5px 0;
+}
+
+.section-subtitle {
+    color: #b8b8b8;
+    margin-bottom: 20px;
+}
+
+.service-card {
+    background: linear-gradient(145deg, #242424, #111111);
+    border: 1px solid #51412a;
+    border-radius: 16px;
+    padding: 20px 12px;
+    text-align: center;
+    min-height: 205px;
+    box-shadow: 0 5px 15px rgba(0,0,0,.3);
+    transition: .2s;
+}
+
+.service-card:hover {
+    border-color: #eab344;
+    transform: translateY(-3px);
+}
+
+.service-icon {
+    font-size: 43px;
+    margin-bottom: 12px;
+}
+
+.service-name {
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 15px;
+    min-height: 40px;
+}
+
+.service-description {
+    color: #bdbdbd;
+    font-size: 12px;
+    margin: 5px 0 12px;
+}
+
+.service-price {
+    background: linear-gradient(90deg, #b77c19, #f5c75c);
+    color: #17100a;
+    font-size: 19px;
+    font-weight: 800;
+    padding: 8px;
+    border-radius: 9px;
+}
+
+.panel {
+    background: linear-gradient(145deg, #202020, #111111);
+    border: 1px solid #51412a;
+    border-radius: 18px;
+    padding: 22px;
+    margin-bottom: 20px;
+}
+
+.benefit {
+    font-size: 15px;
+    margin: 15px 0;
+    color: #e7e7e7;
+}
+
+.benefit span {
+    color: #eab344;
+    font-size: 20px;
+    margin-right: 10px;
+}
+
+.price-highlight {
+    color: #f2bd4d;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+div[data-testid="stButton"] > button {
+    border-radius: 10px;
+    border: 1px solid #dca63c;
+    background: linear-gradient(90deg, #b77c19, #f2bd4d);
+    color: #15100a;
+    font-weight: 800;
+    min-height: 44px;
+}
+
+div[data-testid="stButton"] > button:hover {
+    border: 1px solid #ffe09a;
+    color: #000000;
+    background: #ffd36c;
+}
+
+div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(90deg, #b77c19, #f2bd4d);
+    color: #15100a;
+    border: none;
+    border-radius: 10px;
+    font-weight: 800;
+    min-height: 52px;
+}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stSelectbox"] div,
+div[data-testid="stDateInput"] input {
+    border-radius: 9px;
+}
+
+.footer {
+    text-align: center;
+    border-top: 1px solid #62491e;
+    margin-top: 35px;
+    padding: 25px 10px;
+    color: #bdbdbd;
+    font-size: 13px;
+}
+
+.footer strong {
+    color: #eab344;
+}
+
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# =========================================================
+# FUNÇÕES DE HORÁRIO
+# =========================================================
 
 def mins(txt):
     h, m = map(int, txt.split(":"))
     return h * 60 + m
 
 
-def fmt(m):
-    return f"{m // 60:02d}:{m % 60:02d}"
+def fmt(valor):
+    return f"{valor // 60:02d}:{valor % 60:02d}"
 
+
+def moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def rotulo_dia(dia):
+    return f"{DIAS_SEMANA[dia.weekday()].capitalize()}, {dia:%d/%m/%Y}"
+
+
+# =========================================================
+# CONSULTA À PLANILHA
+# =========================================================
 
 @st.cache_data(ttl=15)
 def buscar_reservas():
-    r = requests.get(SCRIPT_URL, timeout=20)
-    r.raise_for_status()
+
+    resposta = requests.get(
+        SCRIPT_URL,
+        timeout=20
+    )
+
+    resposta.raise_for_status()
+
+    dados = resposta.json()
+
     mapa = {}
-    for x in r.json()["reservas"]:
-        ini = mins(x["hora"])
-        mapa.setdefault((x["data"], x["profissional"]), []).append(
-            (ini, ini + int(x.get("duracao", 30))))
+
+    for reserva in dados.get("reservas", []):
+
+        if not reserva.get("data") or not reserva.get("hora"):
+            continue
+
+        inicio = mins(reserva["hora"])
+
+        duracao = int(reserva.get("duracao", 30))
+
+        chave = (
+            reserva["data"],
+            reserva["profissional"]
+        )
+
+        mapa.setdefault(chave, []).append(
+            (inicio, inicio + duracao)
+        )
+
     return mapa
 
 
-def horarios_livres(prof, dia, mapa, dur):
-    cfg = PROFISSIONAIS[prof]
-    if dia.weekday() not in cfg["dias"]:
+# =========================================================
+# HORÁRIOS DISPONÍVEIS
+# =========================================================
+
+def horarios_livres(profissional, dia, mapa, duracao):
+
+    config = PROFISSIONAIS[profissional]
+
+    if dia.weekday() not in config["dias"]:
         return []
+
     agora = datetime.now(TZ)
-    agora_min = agora.hour * 60 + agora.minute
-    abre, fecha = mins(cfg["inicio"]), mins(cfg["fim"])
-    alm_i, alm_f = mins(cfg["almoco"][0]), mins(cfg["almoco"][1])
-    bloqueios = mapa.get((dia.isoformat(), prof), [])
-    livres, s = [], abre
-    while s + dur <= fecha:
-        e = s + dur
-        no_almoco = s < alm_f and e > alm_i
-        ocupado = any(s < bf and e > bi for bi, bf in bloqueios)
-        passou = dia == agora.date() and s <= agora_min
-        if not (no_almoco or ocupado or passou):
-            livres.append(fmt(s))
-        s += PASSO_MIN
+
+    agora_minutos = agora.hour * 60 + agora.minute
+
+    abre = mins(config["inicio"])
+    fecha = mins(config["fim"])
+
+    almoco_inicio = mins(config["almoco"][0])
+    almoco_fim = mins(config["almoco"][1])
+
+    bloqueios = mapa.get(
+        (dia.isoformat(), profissional),
+        []
+    )
+
+    livres = []
+
+    inicio = abre
+
+    while inicio + duracao <= fecha:
+
+        fim = inicio + duracao
+
+        intervalo_almoco = (
+            inicio < almoco_fim and fim > almoco_inicio
+        )
+
+        ocupado = any(
+            inicio < bloqueio_fim and fim > bloqueio_inicio
+            for bloqueio_inicio, bloqueio_fim in bloqueios
+        )
+
+        horario_passado = (
+            dia == agora.date()
+            and inicio <= agora_minutos
+        )
+
+        if not intervalo_almoco and not ocupado and not horario_passado:
+            livres.append(fmt(inicio))
+
+        inicio += PASSO_MIN
+
     return livres
 
 
-def rotulo_dia(d):
-    return f"{DIAS_SEMANA[d.weekday()]}, {d:%d/%m}"
+# =========================================================
+# CABEÇALHO
+# =========================================================
+
+st.markdown(f"""
+<div class="hero">
+    <div class="hero-logo">💈</div>
+    <h1>BARBEARIA <span>JOEL</span></h1>
+    <p>ESTILO • CONFIANÇA • BEM-ESTAR</p>
+    <div style="color:#eab344;font-size:19px;font-style:italic;margin-top:15px">
+        Seu visual em boas mãos!
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 
-# ---------------- Interface ----------------
-st.title(f"💈 {NOME_BARBEARIA}")
-st.caption("Escolha o serviço, o profissional, o dia e o horário.")
+# =========================================================
+# SERVIÇOS E PREÇOS
+# =========================================================
+
+st.markdown("""
+<div class="section-title">
+    <span class="gold">✂</span> Nossos Serviços
+</div>
+<div class="section-subtitle">
+    Qualidade e estilo para você ficar ainda melhor!
+</div>
+""", unsafe_allow_html=True)
+
+colunas = st.columns(5)
+
+for coluna, (nome, dados) in zip(colunas, SERVICOS.items()):
+
+    with coluna:
+
+        st.markdown(f"""
+        <div class="service-card">
+            <div class="service-icon">{dados['icone']}</div>
+            <div class="service-name">{html.escape(nome)}</div>
+            <div class="service-description">
+                {html.escape(dados['descricao'])}
+            </div>
+            <div class="service-price">
+                {moeda(dados['preco'])}
+            </div>
+            <div style="color:#aaa;font-size:11px;margin-top:8px">
+                {dados['duracao']} minutos
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# =========================================================
+# CARREGAR A AGENDA
+# =========================================================
 
 try:
+
     mapa = buscar_reservas()
-except Exception:
-    st.error("Não consegui carregar a agenda. Tente novamente em instantes.")
+
+except Exception as erro:
+
+    st.error(
+        "Não foi possível carregar a agenda. "
+        "Verifique a conexão com o Google Apps Script."
+    )
+
+    st.caption(str(erro))
+
     st.stop()
 
-servico = st.selectbox("Serviço", list(SERVICOS), format_func=lambda s: f"{s} ({SERVICOS[s]} min)")
-dur = SERVICOS[servico]
-prof = st.radio("Profissional", list(PROFISSIONAIS), horizontal=True)
 
-hoje = datetime.now(TZ).date()
-dias = [hoje + timedelta(days=i) for i in range(DIAS_A_FRENTE)]
-dias_com_vaga = [d for d in dias if horarios_livres(prof, d, mapa, dur)]
+# =========================================================
+# ÁREA DE AGENDAMENTO
+# =========================================================
 
-if not dias_com_vaga:
-    st.warning(f"{prof} não tem horários livres nos próximos {DIAS_A_FRENTE} dias.")
-    st.stop()
+st.markdown("""
+<div class="section-title">
+    <span class="gold">▦</span> Agende seu Horário
+</div>
+<div class="section-subtitle">
+    Escolha o serviço, o profissional, a data e o horário disponível.
+</div>
+""", unsafe_allow_html=True)
 
-dia = st.selectbox("Dia", dias_com_vaga, format_func=rotulo_dia)
-livres = horarios_livres(prof, dia, mapa, dur)
+col_agenda, col_beneficios = st.columns([1.05, 0.95], gap="large")
 
-st.write("**Horários disponíveis**")
-cols = st.columns(3)
-for i, h in enumerate(livres):
-    if cols[i % 3].button(h, key=f"h{h}", use_container_width=True):
-        st.session_state["hora"] = h
-        st.session_state["quando"] = (prof, dia.isoformat(), servico)
 
-hora = None
-if st.session_state.get("quando") == (prof, dia.isoformat(), servico):
-    hora = st.session_state.get("hora")
+with col_agenda:
 
-if hora and hora in livres:
-    st.divider()
-    fim_txt = fmt(mins(hora) + dur)
-    st.info(f"**{servico}** com **{prof}**\n\n{rotulo_dia(dia)}, das **{hora}** às **{fim_txt}**")
-    nome = st.text_input("Seu nome")
-    tel = st.text_input("Seu WhatsApp (com DDD)")
-    if st.button("✅ Confirmar agendamento", type="primary", use_container_width=True):
-        if not nome.strip() or len(tel.strip()) < 10:
-            st.error("Preencha seu nome e WhatsApp com DDD.")
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+
+    servico = st.selectbox(
+        "Escolha o serviço",
+        list(SERVICOS.keys())
+    )
+
+    dados_servico = SERVICOS[servico]
+
+    duracao = dados_servico["duracao"]
+
+    st.markdown(
+        f'<div class="price-highlight">{moeda(dados_servico["preco"])}</div>',
+        unsafe_allow_html=True
+    )
+
+    profissional = st.selectbox(
+        "Profissional",
+        list(PROFISSIONAIS.keys())
+    )
+
+    hoje = datetime.now(TZ).date()
+
+    dias = [
+        hoje + timedelta(days=i)
+        for i in range(DIAS_A_FRENTE)
+    ]
+
+    dias_com_vagas = [
+        dia for dia in dias
+        if horarios_livres(
+            profissional,
+            dia,
+            mapa,
+            duracao
+        )
+    ]
+
+    if not dias_com_vagas:
+
+        st.warning(
+            f"Não há horários disponíveis para {profissional} "
+            f"nos próximos {DIAS_A_FRENTE} dias."
+        )
+
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+
+    dia = st.selectbox(
+        "Data do atendimento",
+        dias_com_vagas,
+        format_func=rotulo_dia
+    )
+
+    livres = horarios_livres(
+        profissional,
+        dia,
+        mapa,
+        duracao
+    )
+
+    st.markdown("**Horários disponíveis**")
+
+    if not livres:
+
+        st.warning("Não existem horários livres para esta data.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+
+    if "hora" not in st.session_state:
+        st.session_state["hora"] = None
+
+    chave_selecao = (
+        profissional,
+        dia.isoformat(),
+        servico
+    )
+
+    if st.session_state.get("chave_selecao") != chave_selecao:
+
+        st.session_state["hora"] = None
+        st.session_state["chave_selecao"] = chave_selecao
+
+    colunas_horarios = st.columns(3)
+
+    for indice, horario in enumerate(livres):
+
+        with colunas_horarios[indice % 3]:
+
+            selecionado = st.session_state["hora"] == horario
+
+            texto_botao = (
+                f"✓ {horario}"
+                if selecionado
+                else horario
+            )
+
+            if st.button(
+                texto_botao,
+                key=f"horario_{dia}_{horario}",
+                use_container_width=True
+            ):
+
+                st.session_state["hora"] = horario
+                st.rerun()
+
+    hora = st.session_state["hora"]
+
+    if hora and hora not in livres:
+        hora = None
+        st.session_state["hora"] = None
+
+    if hora:
+
+        fim = fmt(mins(hora) + duracao)
+
+        st.success(
+            f"Selecionado: {rotulo_dia(dia)} "
+            f"das {hora} às {fim}."
+        )
+
+    st.markdown("---")
+
+    st.markdown("**Seus dados**")
+
+    nome = st.text_input(
+        "Nome completo",
+        placeholder="Digite seu nome"
+    )
+
+    telefone = st.text_input(
+        "WhatsApp com DDD",
+        placeholder="Ex.: 31987654321"
+    )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    confirmar = st.button(
+        "📅 CONFIRMAR AGENDAMENTO",
+        type="primary",
+        use_container_width=True
+    )
+
+
+# =========================================================
+# BENEFÍCIOS
+# =========================================================
+
+with col_beneficios:
+
+    st.markdown("""
+    <div class="panel">
+        <h3><span class="gold">✓</span> Por que agendar conosco?</h3>
+
+        <div class="benefit">
+            <span>★</span> Atendimento profissional
+        </div>
+
+        <div class="benefit">
+            <span>✦</span> Qualidade e atenção aos detalhes
+        </div>
+
+        <div class="benefit">
+            <span>◷</span> Pontualidade no atendimento
+        </div>
+
+        <div class="benefit">
+            <span>✂</span> Estilo personalizado
+        </div>
+
+        <div class="benefit">
+            <span>♛</span> Ambiente agradável
+        </div>
+
+        <hr style="border-color:#51412a">
+
+        <div style="
+            color:#eab344;
+            font-size:24px;
+            font-weight:800;
+            text-align:center;
+            padding:15px 0">
+            Cuide do seu visual!
+        </div>
+
+        <div style="text-align:center;color:#bbb;font-size:13px">
+            Reserve seu horário de forma rápida e prática.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="panel">
+        <h3><span class="gold">◷</span> Horário de Atendimento</h3>
+        <p>Segunda a sábado</p>
+        <p class="gold"><strong>09h às 19h</strong></p>
+        <p style="color:#aaa;font-size:13px">
+            Os horários disponíveis são atualizados conforme a agenda.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =========================================================
+# CONFIRMAR AGENDAMENTO
+# =========================================================
+
+if confirmar:
+
+    if not hora:
+
+        st.error("Selecione um horário disponível.")
+
+    elif not nome.strip():
+
+        st.error("Informe seu nome completo.")
+
+    else:
+
+        numeros = "".join(
+            c for c in telefone if c.isdigit()
+        )
+
+        if len(numeros) < 10:
+
+            st.error("Informe um WhatsApp válido com DDD.")
+
         else:
+
+            # Atualiza a agenda antes de gravar, evitando
+            # aceitar um horário que acabou de ser ocupado.
             try:
-                r = requests.post(SCRIPT_URL, json={
-                    "token": TOKEN, "data": dia.isoformat(), "hora": hora,
-                    "profissional": prof, "cliente": nome.strip(),
-                    "servico": servico, "telefone": tel.strip(), "duracao": dur,
-                }, timeout=30).json()
-            except Exception:
-                r = {"ok": False, "erro": "Falha de conexão. Tente de novo."}
-            buscar_reservas.clear()
-            if r.get("ok"):
-                st.session_state.pop("hora", None)
-                st.success(f"Agendado! {prof}, {rotulo_dia(dia)} às {hora}. 💈")
-                st.balloons()
-                numero = PROFISSIONAIS[prof].get("whatsapp", WHATSAPP_PADRAO)
-                msg = (f"Olá! Agendei {servico} com {prof}, {rotulo_dia(dia)} "
-                       f"às {hora}. Meu nome é {nome.strip()}.")
-                st.link_button("📲 Avisar no WhatsApp", f"https://wa.me/{numero}?text={quote(msg)}",
-                               use_container_width=True)
-            else:
-                st.error(r.get("erro", "Erro ao agendar."))
+
+                mapa_atualizado = buscar_reservas()
+
+                livres_atualizados = horarios_livres(
+                    profissional,
+                    dia,
+                    mapa_atualizado,
+                    duracao
+                )
+
+                if hora not in livres_atualizados:
+
+                    st.error(
+                        "Este horário acabou de ser reservado. "
+                        "Escolha outro horário."
+                    )
+
+                    st.session_state["hora"] = None
+                    st.cache_data.clear()
+                    st.rerun()
+
+                resposta = requests.post(
+                    SCRIPT_URL,
+                    json={
+                        "data": dia.isoformat(),
+                        "hora": hora,
+                        "profissional": profissional,
+                        "cliente": nome.strip(),
+                        "servico": servico,
+                        "telefone": numeros,
+                        "duracao": duracao
+                    },
+                    timeout=30
+                )
+
+                resposta.raise_for_status()
+
+                resultado = resposta.json()
+
+                if resultado.get("ok"):
+
+                    st.session_state["hora"] = None
+                    buscar_reservas.clear()
+
+                    st.success(
+                        "Agendamento realizado com sucesso!"
+                    )
+
+                    st.balloons()
+
+                    st.markdown(f"""
+                    <div class="panel">
+                        <h3 style="color:#eab344;text-align:center">
+                            💈 Agendamento confirmado!
+                        </h3>
+                        <p><strong>Cliente:</strong> {html.escape(nome.strip())}</p>
+                        <p><strong>Serviço:</strong> {html.escape(servico)}</p>
+                        <p><strong>Profissional:</strong> {html.escape(profissional)}</p>
+                        <p><strong>Data:</strong> {rotulo_dia(dia)}</p>
+                        <p><strong>Horário:</strong> {hora} às {fmt(mins(hora) + duracao)}</p>
+                        <p><strong>Valor:</strong> {moeda(dados_servico['preco'])}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    numero = PROFISSIONAIS[profissional].get(
+                        "whatsapp",
+                        WHATSAPP_PADRAO
+                    )
+
+                    mensagem = (
+                        f"Olá! Meu agendamento na {NOME_BARBEARIA} "
+                        f"foi realizado. "
+                        f"Serviço: {servico}. "
+                        f"Profissional: {profissional}. "
+                        f"Data: {rotulo_dia(dia)}. "
+                        f"Horário: {hora}. "
+                        f"Nome: {nome.strip()}."
+                    )
+
+                    link_whatsapp = (
+                        f"https://wa.me/{numero}?text={quote(mensagem)}"
+                    )
+
+                    st.link_button(
+                        "📲 Enviar confirmação pelo WhatsApp",
+                        link_whatsapp,
+                        use_container_width=True
+                    )
+
+                else:
+
+                    st.error(
+                        resultado.get(
+                            "erro",
+                            "Não foi possível concluir o agendamento."
+                        )
+                    )
+
+            except Exception as erro:
+
+                st.error(
+                    "Erro ao realizar o agendamento. "
+                    "Tente novamente."
+                )
+
+                st.caption(str(erro))
+
+
+# =========================================================
+# RODAPÉ
+# =========================================================
+
+st.markdown("""
+<div class="footer">
+    <strong>💈 BARBEARIA JOEL</strong>
+    <br><br>
+    Mais que um corte, um cuidado com você!
+    <br><br>
+    <span style="color:#eab344">
+        Estilo • Confiança • Bem-estar
+    </span>
+    <br><br>
+    © Barbearia Joel - Todos os direitos reservados.
+</div>
+""", unsafe_allow_html=True)
