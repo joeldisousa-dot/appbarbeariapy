@@ -649,6 +649,7 @@ with col_agenda:
     )
 
 
+
 # =========================================================
 # BENEFÍCIOS
 # =========================================================
@@ -658,39 +659,56 @@ with col_beneficios:
     st.markdown("""
     <div class="panel">
         <h3><span class="gold">✓</span> Por que agendar conosco?</h3>
+    """, unsafe_allow_html=True)
 
-        <div class="benefit">
-            <span>★</span> Atendimento profissional
-        </div>
+    beneficios = [
+        ("★", "Atendimento profissional"),
+        ("✦", "Qualidade e atenção aos detalhes"),
+        ("◷", "Pontualidade no atendimento"),
+        ("✂", "Estilo personalizado"),
+        ("♛", "Ambiente agradável")
+    ]
 
-        <div class="benefit">
-            <span>✦</span> Qualidade e atenção aos detalhes
-        </div>
+    for icone, descricao in beneficios:
+        st.markdown(
+            f"""
+            <div style="
+                display:flex;
+                align-items:center;
+                gap:14px;
+                padding:12px 8px;
+                color:#eeeeee;
+                font-size:15px;
+                border-bottom:1px solid #383838;
+            ">
+                <span style="
+                    color:#eab344;
+                    font-size:23px;
+                    min-width:28px;
+                ">{icone}</span>
+                <span>{descricao}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-        <div class="benefit">
-            <span>◷</span> Pontualidade no atendimento
-        </div>
-
-        <div class="benefit">
-            <span>✂</span> Estilo personalizado
-        </div>
-
-        <div class="benefit">
-            <span>♛</span> Ambiente agradável
-        </div>
-
-        <hr style="border-color:#51412a">
-
+    st.markdown("""
         <div style="
             color:#eab344;
-            font-size:24px;
+            font-size:25px;
             font-weight:800;
             text-align:center;
-            padding:15px 0">
+            padding:22px 5px 10px;
+        ">
             Cuide do seu visual!
         </div>
 
-        <div style="text-align:center;color:#bbb;font-size:13px">
+        <div style="
+            text-align:center;
+            color:#bbbbbb;
+            font-size:13px;
+            padding-bottom:12px;
+        ">
             Reserve seu horário de forma rápida e prática.
         </div>
     </div>
@@ -700,12 +718,15 @@ with col_beneficios:
     <div class="panel">
         <h3><span class="gold">◷</span> Horário de Atendimento</h3>
         <p>Segunda a sábado</p>
-        <p class="gold"><strong>09h às 19h</strong></p>
+        <p style="color:#eab344;font-size:23px;font-weight:800">
+            09h às 19h
+        </p>
         <p style="color:#aaa;font-size:13px">
             Os horários disponíveis são atualizados conforme a agenda.
         </p>
     </div>
     """, unsafe_allow_html=True)
+
 
 
 # =========================================================
