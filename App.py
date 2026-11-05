@@ -597,7 +597,7 @@ st.markdown("""
 # SERVIÇOS - BOTÕES MULTIPLA SELEÇÃO
 # ============================================================
 
-st.markdown("## ✂️ Nossos Serviços")
+st.markdown("##  Nossos Serviços")
 
 st.caption(
     "Escolha um ou mais serviços. "
