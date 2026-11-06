@@ -729,8 +729,9 @@ elif st.session_state.etapa == 2:
             st.rerun()
 
 
+
 # ============================================================
-# ETAPA 3 — DATA E HORÁRIO (CORRIGIDA)
+# ETAPA 3 — DATA E HORÁRIO (CORREÇÃO DO BOTÃO CONTINUAR)
 # ============================================================
 
 elif st.session_state.etapa == 3:
@@ -746,34 +747,29 @@ elif st.session_state.etapa == 3:
     )
 
     hoje = date.today()
-    data_inicial = hoje
 
     dias_validos = PROFISSIONAIS[
         st.session_state.profissional
     ]["dias"]
+
+    data_inicial = hoje
 
     while data_inicial.weekday() not in dias_validos:
         data_inicial += timedelta(days=1)
 
     if "data_temp" not in st.session_state:
         st.session_state.data_temp = (
-            st.session_state.data_agendamento
-            or data_inicial
+            st.session_state.data_agendamento or data_inicial
         )
 
     data_escolhida = st.date_input(
         "Data do atendimento",
+        value=st.session_state.data_temp,
         min_value=hoje,
         max_value=hoje + timedelta(days=60),
         format="DD/MM/YYYY",
         key="data_temp"
     )
-
-    # Se a data mudou, limpar o horário anteriormente selecionado.
-    if st.session_state.data_anterior != data_escolhida:
-        st.session_state.data_anterior = data_escolhida
-        st.session_state.hora_agendamento = ""
-        st.session_state.hora_temp = None
 
     st.session_state.data_agendamento = data_escolhida
 
@@ -785,10 +781,12 @@ elif st.session_state.etapa == 3:
     horarios = []
 
     if data_escolhida.weekday() not in dias_validos:
+
         st.warning("O profissional não atende aos domingos.")
 
     else:
-        valor, duracao = calcular_totais()
+
+        _, duracao = calcular_totais()
 
         try:
             with st.spinner("Consultando horários disponíveis..."):
@@ -799,53 +797,74 @@ elif st.session_state.etapa == 3:
                 )
 
         except Exception as erro:
-            st.error(f"Erro ao consultar os horários: {erro}")
+            st.error(f"Erro ao consultar a agenda: {erro}")
+
+    # Variável local que recebe diretamente o horário selecionado.
+    horario_escolhido = None
 
     if horarios:
 
-        # Garantir que o horário selecionado ainda esteja disponível.
-        if st.session_state.hora_agendamento not in horarios:
-            st.session_state.hora_agendamento = ""
+        chave_horario = f"horario_{data_escolhida.isoformat()}"
 
-        indice = (
-            horarios.index(st.session_state.hora_agendamento)
-            if st.session_state.hora_agendamento in horarios
-            else None
+        horario_anterior = st.session_state.get(
+            chave_horario,
+            horarios[0]
         )
 
+        if horario_anterior not in horarios:
+            horario_anterior = horarios[0]
+
         horario_escolhido = st.radio(
-            "Selecione um horário:",
+            "Selecione um horário disponível:",
             options=horarios,
-            index=indice,
-            key="hora_temp",
+            index=horarios.index(horario_anterior),
+            key=chave_horario,
             horizontal=True
         )
 
+        # Atualiza imediatamente a variável da sessão.
         st.session_state.hora_agendamento = horario_escolhido
 
     else:
+
         st.session_state.hora_agendamento = ""
-        st.info("Não existem horários disponíveis para essa data.")
+
+        st.info(
+            "Não existem horários disponíveis para essa data."
+        )
 
     st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("← VOLTAR", use_container_width=True):
+
+        if st.button(
+            "← VOLTAR",
+            use_container_width=True
+        ):
             st.session_state.etapa = 2
             st.rerun()
 
     with col2:
+
         if st.button(
             "CONTINUAR →",
-            use_container_width=True,
-            disabled=not st.session_state.hora_agendamento
+            use_container_width=True
         ):
-            st.session_state.data_agendamento = data_escolhida
-            st.session_state.hora_agendamento = st.session_state.hora_temp
-            st.session_state.etapa = 4
-            st.rerun()
+
+            # Verifica diretamente o horário selecionado.
+            if not horario_escolhido:
+                st.error("Selecione um horário para continuar.")
+
+            else:
+                st.session_state.data_agendamento = data_escolhida
+                st.session_state.hora_agendamento = horario_escolhido
+
+                # Avança para a etapa 4: dados do cliente.
+                st.session_state.etapa = 4
+
+                st.rerun()
 
 
 # ============================================================
