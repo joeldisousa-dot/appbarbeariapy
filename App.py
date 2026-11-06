@@ -728,8 +728,9 @@ elif st.session_state.etapa == 2:
             avancar_etapa()
             st.rerun()
 
+
 # ============================================================
-# ETAPA 3 — DATA E HORÁRIO
+# ETAPA 3 — DATA E HORÁRIO (CORRIGIDA)
 # ============================================================
 
 elif st.session_state.etapa == 3:
@@ -747,36 +748,45 @@ elif st.session_state.etapa == 3:
     hoje = date.today()
     data_inicial = hoje
 
-    while data_inicial.weekday() not in PROFISSIONAIS[
+    dias_validos = PROFISSIONAIS[
         st.session_state.profissional
-    ]["dias"]:
+    ]["dias"]
+
+    while data_inicial.weekday() not in dias_validos:
         data_inicial += timedelta(days=1)
 
-    if data_inicial < hoje:
-        data_inicial = hoje
+    if "data_temp" not in st.session_state:
+        st.session_state.data_temp = (
+            st.session_state.data_agendamento
+            or data_inicial
+        )
 
     data_escolhida = st.date_input(
         "Data do atendimento",
-        value=(
-            st.session_state.data_agendamento
-            if st.session_state.data_agendamento
-            else data_inicial
-        ),
         min_value=hoje,
         max_value=hoje + timedelta(days=60),
         format="DD/MM/YYYY",
         key="data_temp"
     )
 
+    # Se a data mudou, limpar o horário anteriormente selecionado.
+    if st.session_state.data_anterior != data_escolhida:
+        st.session_state.data_anterior = data_escolhida
+        st.session_state.hora_agendamento = ""
+        st.session_state.hora_temp = None
+
     st.session_state.data_agendamento = data_escolhida
 
-    dias_validos = PROFISSIONAIS[
-        st.session_state.profissional
-    ]["dias"]
+    st.markdown(
+        '<div class="section-title">🕒 Horários disponíveis</div>',
+        unsafe_allow_html=True
+    )
+
+    horarios = []
 
     if data_escolhida.weekday() not in dias_validos:
         st.warning("O profissional não atende aos domingos.")
-        horarios = []
+
     else:
         valor, duracao = calcular_totais()
 
@@ -787,28 +797,26 @@ elif st.session_state.etapa == 3:
                     st.session_state.profissional,
                     duracao
                 )
-        except Exception as erro:
-            horarios = []
-            st.error(f"Não foi possível consultar a agenda: {erro}")
 
-    st.markdown(
-        '<div class="section-title">🕒 Horários disponíveis</div>',
-        unsafe_allow_html=True
-    )
+        except Exception as erro:
+            st.error(f"Erro ao consultar os horários: {erro}")
 
     if horarios:
-        horario_atual = st.session_state.hora_agendamento
 
-        indice_horario = (
-            horarios.index(horario_atual)
-            if horario_atual in horarios
-            else 0
+        # Garantir que o horário selecionado ainda esteja disponível.
+        if st.session_state.hora_agendamento not in horarios:
+            st.session_state.hora_agendamento = ""
+
+        indice = (
+            horarios.index(st.session_state.hora_agendamento)
+            if st.session_state.hora_agendamento in horarios
+            else None
         )
 
         horario_escolhido = st.radio(
-            "Selecione um horário",
-            horarios,
-            index=indice_horario,
+            "Selecione um horário:",
+            options=horarios,
+            index=indice,
             key="hora_temp",
             horizontal=True
         )
@@ -817,7 +825,7 @@ elif st.session_state.etapa == 3:
 
     else:
         st.session_state.hora_agendamento = ""
-        st.info("Não há horários disponíveis para essa data e duração.")
+        st.info("Não existem horários disponíveis para essa data.")
 
     st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
@@ -825,17 +833,20 @@ elif st.session_state.etapa == 3:
 
     with col1:
         if st.button("← VOLTAR", use_container_width=True):
-            voltar_etapa()
+            st.session_state.etapa = 2
             st.rerun()
 
     with col2:
         if st.button(
             "CONTINUAR →",
-            disabled=not st.session_state.hora_agendamento,
-            use_container_width=True
+            use_container_width=True,
+            disabled=not st.session_state.hora_agendamento
         ):
-            avancar_etapa()
+            st.session_state.data_agendamento = data_escolhida
+            st.session_state.hora_agendamento = st.session_state.hora_temp
+            st.session_state.etapa = 4
             st.rerun()
+
 
 # ============================================================
 # ETAPA 4 — DADOS DO CLIENTE
