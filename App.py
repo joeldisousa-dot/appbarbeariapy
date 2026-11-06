@@ -1,35 +1,39 @@
 
 import streamlit as st
 import requests
+import json
 import re
-
-from datetime import datetime, date, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, date, time, timedelta
 from urllib.parse import quote
-
 
 # ============================================================
 # CONFIGURAÇÕES
 # ============================================================
 
-NOME_BARBEARIA = "Barbearia Joel"
-TZ = ZoneInfo("America/Sao_Paulo")
+st.set_page_config(
+    page_title="Barbearia Joel | Agendamento",
+    page_icon="💈",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-DIAS_A_FRENTE = 14
-PASSO_MIN = 30
+try:
+    SCRIPT_URL = str(st.secrets["SCRIPT_URL"]).strip()
+except Exception:
+    SCRIPT_URL = ""
 
-WHATSAPP_PADRAO = "5531999999999"
+WHATSAPP_PADRAO = "5531999999999"  # Substitua pelo número real
+NOME_SISTEMA = "BARBEARIA JOEL"
 
-SCRIPT_URL = st.secrets.get("SCRIPT_URL", "").strip() if "SCRIPT_URL" in st.secrets else ""
-
-if not SCRIPT_URL:
-    st.error("Configure SCRIPT_URL nas Secrets do Streamlit.")
-    st.stop()
-
-
-# ============================================================
-# SERVIÇOS
-# ============================================================
+PROFISSIONAIS = {
+    "Joel": {
+        "dias": [0, 1, 2, 3, 4, 5],
+        "inicio": "09:00",
+        "fim": "19:00",
+        "almoco_inicio": "12:00",
+        "almoco_fim": "13:00"
+    }
+}
 
 SERVICOS = {
     "Corte Masculino": {
@@ -64,36 +68,8 @@ SERVICOS = {
     }
 }
 
-
 # ============================================================
-# PROFISSIONAIS
-# ============================================================
-
-PROFISSIONAIS = {
-    "Joel": {
-        "dias": [0, 1, 2, 3, 4, 5],
-        "inicio": "09:00",
-        "fim": "19:00",
-        "almoco_inicio": "12:00",
-        "almoco_fim": "13:00"
-    }
-}
-
-
-# ============================================================
-# PÁGINA
-# ============================================================
-
-st.set_page_config(
-    page_title="Barbearia Joel | Agendamento",
-    page_icon="💈",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-
-# ============================================================
-# VISUAL
+# ESTILO VISUAL
 # ============================================================
 
 st.markdown("""
@@ -101,7 +77,7 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Montserrat', sans-serif !important;
 }
 
 .stApp {
@@ -114,451 +90,505 @@ header[data-testid="stHeader"] {
 }
 
 .block-container {
-    max-width: 1050px;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    max-width: 900px;
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
 }
 
-h1, h2, h3 {
-    color: #eab344 !important;
-    font-weight: 800 !important;
+h1, h2, h3, h4, p, label {
+    font-family: 'Montserrat', sans-serif !important;
 }
 
-p, label, span {
-    color: #eeeeee;
-}
-
-.hero {
-    background: linear-gradient(135deg, #202020, #090909);
-    border: 1px solid #b8862b;
-    border-radius: 18px;
-    padding: 35px 20px;
+.brand {
     text-align: center;
-    margin-bottom: 30px;
+    padding: 25px 10px 20px 10px;
+    border-bottom: 1px solid #b88a32;
+    margin-bottom: 25px;
 }
 
-.hero-icon {
+.brand-icon {
     font-size: 48px;
+    margin-bottom: 5px;
 }
 
-.hero-title {
+.brand-title {
     color: #eab344;
-    font-size: 38px;
+    font-size: 34px;
     font-weight: 800;
-    letter-spacing: 3px;
+    letter-spacing: 2px;
+    margin: 0;
 }
 
-.hero-subtitle {
+.brand-subtitle {
     color: #ffffff;
-    font-size: 14px;
-    letter-spacing: 4px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    margin-top: 8px;
 }
 
-.hero-slogan {
+.brand-slogan {
     color: #eab344;
-    font-size: 19px;
+    font-size: 15px;
     font-style: italic;
     margin-top: 15px;
 }
 
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    border-color: #51432b;
-    border-radius: 14px;
-    background: #181818;
+.section-title {
+    color: #eab344;
+    font-size: 22px;
+    font-weight: 800;
+    margin: 15px 0 8px 0;
 }
 
-.stButton > button {
-    border-radius: 9px;
-    border: 1px solid #d9a43b;
-    background: #d9a43b;
-    color: #111111;
+.section-description {
+    color: #cccccc;
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.service-card {
+    background: #ffffff;
+    border: 1px solid #eab344;
+    border-radius: 12px;
+    padding: 17px;
+    min-height: 130px;
+    margin-bottom: 10px;
+    color: #000000 !important;
+}
+
+.service-card * {
+    color: #000000 !important;
+}
+
+.service-icon {
+    font-size: 25px;
+}
+
+.service-name {
+    font-size: 15px;
+    font-weight: 800;
+    margin-top: 7px;
+}
+
+.service-description {
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.service-price {
+    color: #9a6a12 !important;
+    font-weight: 800;
+    font-size: 16px;
+    margin-top: 8px;
+}
+
+.step-indicator {
+    color: #eab344;
+    font-size: 12px;
     font-weight: 700;
-    min-height: 43px;
+    text-align: center;
+    margin: 12px 0 20px 0;
+    letter-spacing: 1px;
 }
 
-.stButton > button:hover {
-    background: #f0c15c;
-    border-color: #f0c15c;
-    color: #000000;
+.gold-line {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #eab344, transparent);
+    margin: 15px 0 22px 0;
+}
+
+.summary-card {
+    background: #ffffff;
+    color: #000000 !important;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #eab344;
+    margin: 15px 0;
+}
+
+.summary-card * {
+    color: #000000 !important;
+}
+
+.summary-total {
+    color: #9a6a12 !important;
+    font-size: 23px;
+    font-weight: 800;
+}
+
+.small-muted {
+    color: #bbbbbb;
+    font-size: 12px;
+}
+
+.success-card {
+    background: #ffffff;
+    color: #000000 !important;
+    border: 1px solid #eab344;
+    padding: 22px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.success-card * {
+    color: #000000 !important;
+}
+
+div.stButton > button {
+    background: #eab344;
+    color: #111111 !important;
+    border: none;
+    border-radius: 8px;
+    font-weight: 800;
+    min-height: 43px;
+    transition: 0.2s;
+}
+
+div.stButton > button:hover {
+    background: #ffffff;
+    color: #000000 !important;
+    border: 1px solid #eab344;
+}
+
+div.stButton > button:disabled {
+    background: #555555;
+    color: #cccccc !important;
 }
 
 .stTextInput input,
-.stSelectbox div[data-baseweb="select"],
-.stDateInput input {
-    background: #252525;
-    color: #ffffff;
-    border-radius: 8px;
+.stDateInput input,
+.stSelectbox input,
+.stTimeInput input,
+div[data-baseweb="select"] > div {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-radius: 7px !important;
 }
 
 .stTextInput label,
+.stDateInput label,
 .stSelectbox label,
-.stDateInput label {
-    color: #eab344 !important;
-    font-weight: 600;
+.stRadio label,
+.stCheckbox label {
+    color: #ffffff !important;
+}
+
+.stRadio div[role="radiogroup"] label {
+    color: #ffffff !important;
+}
+
+div[data-testid="stAlert"] {
+    color: #000000 !important;
+}
+
+div[data-testid="stAlert"] p {
+    color: #000000 !important;
 }
 
 hr {
-    border-color: #51432b;
+    border-color: #444444;
 }
 
-.footer {
-    text-align: center;
-    color: #999999;
-    font-size: 12px;
-    padding: 25px 0 5px 0;
+footer {
+    visibility: hidden;
 }
 
+#MainMenu {
+    visibility: hidden;
+}
 </style>
 """, unsafe_allow_html=True)
 
-
 # ============================================================
-# ESTADO DO AGENDAMENTO
+# ESTADO DA APLICAÇÃO
 # ============================================================
 
-PADROES = {
+ESTADOS_INICIAIS = {
     "etapa": 1,
-    "servicos": [],
-    "profissional": None,
-    "data": None,
-    "horario": None,
+    "servicos_selecionados": [],
+    "profissional": "",
+    "data_agendamento": None,
+    "hora_agendamento": "",
     "cliente": "",
     "telefone": "",
-    "confirmado": None
+    "confirmado": None,
+    "erro": "",
+    "data_anterior": None
 }
 
-for chave, valor in PADROES.items():
+for chave, valor in ESTADOS_INICIAIS.items():
     if chave not in st.session_state:
         st.session_state[chave] = valor
-
-
-def ir_para(etapa):
-    st.session_state.etapa = etapa
-
-
-def reiniciar():
-    for chave, valor in PADROES.items():
-        st.session_state[chave] = valor
-
-    for chave in [
-        "selecionados_temp",
-        "profissional_temp",
-        "data_temp",
-        "horario_temp",
-        "cliente_temp",
-        "telefone_temp"
-    ]:
-        st.session_state.pop(chave, None)
-
-    st.rerun()
-
 
 # ============================================================
 # FUNÇÕES AUXILIARES
 # ============================================================
 
-def agora():
-    return datetime.now(TZ)
+def dinheiro(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def minutos(horario):
-    h, m = map(int, str(horario)[:5].split(":"))
-    return h * 60 + m
-
-
-def formatar_hora(valor):
-    if isinstance(valor, datetime):
-        return valor.strftime("%H:%M")
-
-    texto = str(valor).strip()
-
-    try:
-        return datetime.strptime(texto[:5], "%H:%M").strftime("%H:%M")
-    except ValueError:
-        return texto[:5]
-
-
-def formatar_data(valor):
-    if isinstance(valor, datetime):
-        return valor.date()
-
-    if isinstance(valor, date):
-        return valor
-
-    texto = str(valor).strip()
-
-    for formato in [
-        "%Y-%m-%d",
-        "%d/%m/%Y",
-        "%Y-%m-%dT%H:%M:%S",
-        "%d/%m/%Y %H:%M:%S"
-    ]:
-        try:
-            return datetime.strptime(texto[:19], formato).date()
-        except ValueError:
-            continue
-
-    return None
-
-
-def moeda(valor):
-    return (
-        f"R$ {valor:,.2f}"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
+def calcular_totais():
+    valor = sum(
+        SERVICOS[nome]["preco"]
+        for nome in st.session_state.servicos_selecionados
     )
 
+    duracao = sum(
+        SERVICOS[nome]["duracao"]
+        for nome in st.session_state.servicos_selecionados
+    )
 
-def telefone_valido(numero):
-    return len(re.sub(r"\D", "", numero)) in (10, 11)
-
-
-def sobrepoe(inicio1, fim1, inicio2, fim2):
-    return inicio1 < fim2 and inicio2 < fim1
-
-
-def calcular_valores(servicos):
-    valor = sum(SERVICOS[n]["preco"] for n in servicos)
-    duracao = sum(SERVICOS[n]["duracao"] for n in servicos)
     return valor, duracao
 
 
-# ============================================================
-# GOOGLE SHEETS
-# ============================================================
+def converter_hora(hora_texto):
+    return datetime.strptime(hora_texto, "%H:%M").time()
 
-@st.cache_data(ttl=15, show_spinner=False)
+
+def normalizar_telefone(numero):
+    return re.sub(r"\D", "", numero or "")
+
+
 def buscar_reservas():
-    try:
-        resposta = requests.get(SCRIPT_URL, timeout=20)
-        resposta.raise_for_status()
+    if not SCRIPT_URL:
+        raise Exception("A URL do Google Apps Script não foi configurada.")
 
-        dados = resposta.json()
+    resposta = requests.get(
+        SCRIPT_URL,
+        timeout=20
+    )
 
-        if isinstance(dados, list):
-            return dados
+    resposta.raise_for_status()
+    dados = resposta.json()
 
-        reservas = dados.get("reservas", [])
+    if isinstance(dados, list):
+        return dados
 
-        if not isinstance(reservas, list):
-            return []
+    if isinstance(dados, dict):
+        if "reservas" in dados:
+            return dados["reservas"] or []
 
-        return reservas
+        if dados.get("sucesso") is False or dados.get("success") is False:
+            raise Exception(
+                dados.get("mensagem", dados.get("erro", "Erro ao consultar agenda."))
+            )
 
-    except requests.exceptions.Timeout:
-        raise RuntimeError("O Google Apps Script demorou para responder.")
-
-    except requests.exceptions.RequestException as erro:
-        raise RuntimeError(f"Erro ao consultar a agenda: {erro}")
-
-    except ValueError:
-        raise RuntimeError("Resposta inválida do Google Apps Script.")
+    raise Exception("O retorno do Google Apps Script está em formato inesperado.")
 
 
-def reservas_do_dia(reservas, dia, profissional):
-    resultado = []
+def horario_disponivel(data_escolhida, hora_escolhida, duracao, profissional):
+    configuracao = PROFISSIONAIS[profissional]
+
+    inicio = datetime.combine(data_escolhida, converter_hora(hora_escolhida))
+    fim = inicio + timedelta(minutes=duracao)
+
+    abertura = datetime.combine(
+        data_escolhida,
+        converter_hora(configuracao["inicio"])
+    )
+
+    fechamento = datetime.combine(
+        data_escolhida,
+        converter_hora(configuracao["fim"])
+    )
+
+    almoco_inicio = datetime.combine(
+        data_escolhida,
+        converter_hora(configuracao["almoco_inicio"])
+    )
+
+    almoco_fim = datetime.combine(
+        data_escolhida,
+        converter_hora(configuracao["almoco_fim"])
+    )
+
+    if inicio < abertura or fim > fechamento:
+        return False
+
+    if inicio < almoco_fim and fim > almoco_inicio:
+        return False
+
+    agora = datetime.now()
+
+    if data_escolhida == date.today() and inicio <= agora:
+        return False
+
+    reservas = buscar_reservas()
 
     for reserva in reservas:
-        data_reserva = formatar_data(reserva.get("data", ""))
+        if not isinstance(reserva, dict):
+            continue
 
-        nome_profissional = str(
+        data_reserva = str(reserva.get("data", ""))[:10]
+        profissional_reserva = str(
             reserva.get("profissional", "")
         ).strip()
 
-        if data_reserva != dia or nome_profissional != profissional:
+        if data_reserva != data_escolhida.isoformat():
             continue
 
-        try:
-            inicio = minutos(formatar_hora(reserva.get("hora", "")))
+        if profissional_reserva != profissional:
+            continue
 
-            duracao = int(
-                reserva.get(
-                    "duracao",
-                    reserva.get("duracao_min", 30)
-                )
+        hora_reserva = str(reserva.get("hora", ""))[:5]
+
+        try:
+            inicio_reserva = datetime.combine(
+                data_escolhida,
+                converter_hora(hora_reserva)
             )
 
-            if duracao <= 0:
-                duracao = 30
+            duracao_reserva = int(
+                reserva.get("duracao", reserva.get("duracao_min", 30)) or 30
+            )
 
-            resultado.append((inicio, inicio + duracao))
+            fim_reserva = inicio_reserva + timedelta(
+                minutes=duracao_reserva
+            )
+
+            if inicio < fim_reserva and fim > inicio_reserva:
+                return False
 
         except (ValueError, TypeError):
             continue
 
-    return resultado
+    return True
 
 
-# ============================================================
-# HORÁRIOS LIVRES
-# ============================================================
+def listar_horarios(data_escolhida, profissional, duracao):
+    configuracao = PROFISSIONAIS[profissional]
+    horarios = []
 
-def horarios_livres(dia, profissional, duracao, reservas):
+    inicio = converter_hora(configuracao["inicio"])
+    fim = converter_hora(configuracao["fim"])
 
-    config = PROFISSIONAIS[profissional]
+    atual = datetime.combine(data_escolhida, inicio)
+    limite = datetime.combine(data_escolhida, fim)
 
-    if dia.weekday() not in config["dias"]:
-        return []
+    while atual < limite:
+        hora_texto = atual.strftime("%H:%M")
 
-    inicio_expediente = minutos(config["inicio"])
-    fim_expediente = minutos(config["fim"])
-    almoco_inicio = minutos(config["almoco_inicio"])
-    almoco_fim = minutos(config["almoco_fim"])
+        try:
+            if horario_disponivel(
+                data_escolhida,
+                hora_texto,
+                duracao,
+                profissional
+            ):
+                horarios.append(hora_texto)
+        except Exception:
+            raise
 
-    ocupados = reservas_do_dia(
-        reservas,
-        dia,
-        profissional
+        atual += timedelta(minutes=30)
+
+    return horarios
+
+
+def enviar_agendamento():
+    valor, duracao = calcular_totais()
+
+    servico_texto = " + ".join(
+        st.session_state.servicos_selecionados
     )
 
-    livres = []
-    atual = agora()
-
-    for inicio in range(
-        inicio_expediente,
-        fim_expediente,
-        PASSO_MIN
-    ):
-        fim = inicio + duracao
-
-        if fim > fim_expediente:
-            continue
-
-        if sobrepoe(
-            inicio,
-            fim,
-            almoco_inicio,
-            almoco_fim
-        ):
-            continue
-
-        if dia == atual.date():
-            horario_atual = atual.hour * 60 + atual.minute
-
-            if inicio <= horario_atual:
-                continue
-
-        conflito = any(
-            sobrepoe(inicio, fim, oi, of)
-            for oi, of in ocupados
-        )
-
-        if not conflito:
-            livres.append(f"{inicio // 60:02d}:{inicio % 60:02d}")
-
-    return livres
-
-
-# ============================================================
-# GRAVAR RESERVA
-# ============================================================
-
-def salvar_agendamento(
-    dia,
-    horario,
-    profissional,
-    cliente,
-    servico,
-    telefone,
-    duracao
-):
-    dados = {
-        "data": dia.isoformat(),
-        "hora": horario,
-        "profissional": profissional,
-        "cliente": cliente.strip(),
-        "servico": servico,
-        "telefone": re.sub(r"\D", "", telefone),
-        "duracao": int(duracao)
+    payload = {
+        "data": st.session_state.data_agendamento.isoformat(),
+        "hora": st.session_state.hora_agendamento,
+        "profissional": st.session_state.profissional,
+        "cliente": st.session_state.cliente.strip(),
+        "servico": servico_texto,
+        "telefone": normalizar_telefone(st.session_state.telefone),
+        "duracao": duracao
     }
 
+    resposta = requests.post(
+        SCRIPT_URL,
+        data=payload,
+        timeout=30
+    )
+
+    resposta.raise_for_status()
+
     try:
-        resposta = requests.post(
-            SCRIPT_URL,
-            json=dados,
-            timeout=30
-        )
-
-        resposta.raise_for_status()
         retorno = resposta.json()
+    except ValueError:
+        raise Exception("O servidor retornou uma resposta inválida.")
 
-        if not isinstance(retorno, dict):
-            return False, "Resposta inesperada do servidor."
+    if not isinstance(retorno, dict):
+        raise Exception("O retorno do servidor está em formato inesperado.")
 
-        sucesso = retorno.get(
-            "sucesso",
-            retorno.get("success", retorno.get("ok", None))
-        )
+    sucesso = retorno.get(
+        "sucesso",
+        retorno.get("success", retorno.get("ok"))
+    )
 
+    if sucesso is not True:
         mensagem = retorno.get(
             "mensagem",
-            retorno.get("message", "Não foi possível confirmar.")
+            retorno.get("erro", retorno.get("error", "Não foi possível confirmar o agendamento."))
         )
+        raise Exception(mensagem)
 
-        if sucesso is True:
-            return True, mensagem
+    return payload, valor, duracao
 
-        if sucesso is False:
-            return False, mensagem
 
-        erro = retorno.get("erro", retorno.get("error"))
+def montar_link_whatsapp(payload, valor, duracao):
+    telefone = WHATSAPP_PADRAO
 
-        if erro:
-            return False, str(erro)
+    data_formatada = datetime.strptime(
+        payload["data"], "%Y-%m-%d"
+    ).strftime("%d/%m/%Y")
 
-        return True, mensagem
+    mensagem = f"""
+Olá! Gostaria de confirmar meu agendamento na {NOME_SISTEMA}.
 
-    except requests.exceptions.Timeout:
-        return False, (
-            "O servidor demorou para responder. "
-            "Confira a agenda antes de tentar novamente."
-        )
+Cliente: {payload['cliente']}
+Telefone: {payload['telefone']}
+Serviço(s): {payload['servico']}
+Profissional: {payload['profissional']}
+Data: {data_formatada}
+Horário: {payload['hora']}
+Duração: {duracao} minutos
+Valor total: {dinheiro(valor)}
 
-    except requests.exceptions.RequestException as erro:
-        return False, f"Erro ao enviar agendamento: {erro}"
+Aguardo a confirmação. Obrigado!
+"""
 
-    except ValueError:
-        return False, "O servidor retornou uma resposta inválida."
+    return (
+        f"https://wa.me/{telefone}"
+        f"?text={quote(mensagem.strip())}"
+    )
 
+
+def avancar_etapa():
+    st.session_state.etapa += 1
+
+
+def voltar_etapa():
+    st.session_state.etapa -= 1
+
+
+def reiniciar_agendamento():
+    for chave, valor in ESTADOS_INICIAIS.items():
+        st.session_state[chave] = valor
+
+    for chave in ["data_temp", "hora_temp", "nome_temp", "telefone_temp"]:
+        if chave in st.session_state:
+            del st.session_state[chave]
 
 # ============================================================
-# CABEÇALHO FIXO
+# CABEÇALHO
 # ============================================================
 
 st.markdown("""
-<div class="hero">
-    <div class="hero-icon">💈</div>
-    <div class="hero-title">BARBEARIA JOEL</div>
-    <div class="hero-subtitle">
-        ESTILO • CONFIANÇA • BEM-ESTAR
-    </div>
-    <div class="hero-slogan">
-        Seu visual em boas mãos!
-    </div>
+<div class="brand">
+    <div class="brand-icon">💈</div>
+    <div class="brand-title">BARBEARIA JOEL</div>
+    <div class="brand-subtitle">ESTILO • CONFIANÇA • BEM-ESTAR</div>
+    <div class="brand-slogan">Seu visual em boas mãos!</div>
 </div>
 """, unsafe_allow_html=True)
-
-
-# ============================================================
-# INDICADOR DE ETAPAS
-# ============================================================
-
-etapas = [
-    "Serviços",
-    "Profissional",
-    "Data e horário",
-    "Seus dados",
-    "Resumo"
-]
-
-st.progress(st.session_state.etapa / 5)
-
-st.caption(
-    f"ETAPA {st.session_state.etapa} DE 5 — "
-    f"{etapas[st.session_state.etapa - 1]}"
-)
-
 
 # ============================================================
 # ETAPA 1 — SERVIÇOS
@@ -566,91 +596,90 @@ st.caption(
 
 if st.session_state.etapa == 1:
 
-    st.markdown("## ✂️ Nossos Serviços")
-
-    st.write(
-        "Escolha um ou mais serviços. "
-        "O valor e a duração serão calculados automaticamente."
+    st.markdown(
+        '<div class="section-title">✂️ Nossos Serviços</div>',
+        unsafe_allow_html=True
     )
 
-    if "selecionados_temp" not in st.session_state:
-        st.session_state.selecionados_temp = list(
-            st.session_state.servicos
-        )
+    st.markdown(
+        '<div class="section-description">'
+        'Escolha um ou mais serviços para continuar.'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
-    colunas = st.columns(5)
+    nomes_servicos = list(SERVICOS.keys())
 
-    for indice, (nome, dados) in enumerate(SERVICOS.items()):
+    for inicio_lista in range(0, len(nomes_servicos), 2):
+        colunas = st.columns(2)
 
-        selecionado = nome in st.session_state.selecionados_temp
+        for indice, coluna in enumerate(colunas):
+            posicao = inicio_lista + indice
 
-        with colunas[indice]:
+            if posicao >= len(nomes_servicos):
+                continue
 
-            with st.container(border=True):
+            nome = nomes_servicos[posicao]
+            dados = SERVICOS[nome]
 
-                st.markdown(
-                    f"<div style='text-align:center;font-size:36px;'>{dados['icone']}</div>",
-                    unsafe_allow_html=True
+            selecionado = nome in st.session_state.servicos_selecionados
+
+            with coluna:
+                st.markdown(f"""
+                <div class="service-card">
+                    <div class="service-icon">{dados['icone']}</div>
+                    <div class="service-name">{nome}</div>
+                    <div class="service-description">{dados['descricao']}</div>
+                    <div class="service-price">{dinheiro(dados['preco'])}</div>
+                    <div class="service-description">{dados['duracao']} minutos</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                texto_botao = (
+                    "✓ Selecionado"
+                    if selecionado
+                    else "+ Adicionar serviço"
                 )
-
-                st.markdown(f"**{nome}**")
-                st.caption(dados["descricao"])
-
-                st.markdown(
-                    f"### :orange[{moeda(dados['preco'])}]"
-                )
-
-                st.caption(f"{dados['duracao']} minutos")
 
                 if st.button(
-                    "✓ Selecionado" if selecionado else "+ Adicionar",
-                    key=f"selecionar_{indice}",
-                    use_container_width=True,
-                    type="primary" if selecionado else "secondary"
+                    texto_botao,
+                    key=f"servico_{posicao}",
+                    use_container_width=True
                 ):
                     if selecionado:
-                        st.session_state.selecionados_temp.remove(nome)
+                        st.session_state.servicos_selecionados.remove(nome)
                     else:
-                        st.session_state.selecionados_temp.append(nome)
+                        st.session_state.servicos_selecionados.append(nome)
 
                     st.rerun()
 
-    if st.session_state.selecionados_temp:
+    if st.session_state.servicos_selecionados:
+        valor, duracao = calcular_totais()
 
-        total, tempo = calcular_valores(
-            st.session_state.selecionados_temp
-        )
+        st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
-        st.divider()
-        st.markdown("### Resumo dos serviços")
+        st.markdown("**Serviços selecionados:**")
 
-        for nome in st.session_state.selecionados_temp:
-            st.write(
-                f"• {nome} — {moeda(SERVICOS[nome]['preco'])}"
-            )
+        for nome in st.session_state.servicos_selecionados:
+            st.write(f"✓ {nome}")
 
-        c1, c2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-        c1.metric("Valor total", moeda(total))
-        c2.metric("Duração total", f"{tempo} minutos")
+        with col1:
+            st.metric("Duração total", f"{duracao} minutos")
 
-    st.divider()
+        with col2:
+            st.metric("Valor total", dinheiro(valor))
+
+    st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
     if st.button(
-        "CONTINUAR PARA PROFISSIONAL ➜",
-        use_container_width=True,
-        disabled=not st.session_state.selecionados_temp
+        "CONTINUAR →",
+        disabled=not st.session_state.servicos_selecionados,
+        use_container_width=True
     ):
-        st.session_state.servicos = list(
-            st.session_state.selecionados_temp
-        )
-        st.session_state.profissional = None
-        st.session_state.data = None
-        st.session_state.horario = None
-        st.session_state.confirmado = None
-        ir_para(2)
+        avancar_etapa()
         st.rerun()
-
 
 # ============================================================
 # ETAPA 2 — PROFISSIONAL
@@ -658,43 +687,46 @@ if st.session_state.etapa == 1:
 
 elif st.session_state.etapa == 2:
 
-    st.markdown("## 👤 Escolha o profissional")
+    st.markdown(
+        '<div class="step-indicator">ETAPA 2 DE 5 — PROFISSIONAL</div>',
+        unsafe_allow_html=True
+    )
 
-    st.write("Selecione quem realizará seu atendimento.")
+    st.markdown(
+        '<div class="section-title">💈 Escolha o profissional</div>',
+        unsafe_allow_html=True
+    )
 
-    profissional_escolhido = st.selectbox(
-        "Profissional",
-        list(PROFISSIONAIS.keys()),
-        index=(
-            list(PROFISSIONAIS.keys()).index(
-                st.session_state.profissional
-            )
-            if st.session_state.profissional in PROFISSIONAIS
-            else 0
-        ),
+    st.markdown(
+        '<div class="section-description">'
+        'Selecione quem realizará seu atendimento.'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    profissional = st.radio(
+        "Profissional disponível",
+        options=list(PROFISSIONAIS.keys()),
+        index=0 if not st.session_state.profissional else
+        list(PROFISSIONAIS.keys()).index(st.session_state.profissional),
         key="profissional_temp"
     )
 
-    with st.container(border=True):
-        st.markdown("### 💈 Joel")
-        st.write("Atendimento profissional e personalizado.")
-        st.caption("Segunda a sábado, das 09h às 19h.")
+    st.session_state.profissional = profissional
+
+    st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("← Voltar aos serviços", use_container_width=True):
-            ir_para(1)
+        if st.button("← VOLTAR", use_container_width=True):
+            voltar_etapa()
             st.rerun()
 
     with col2:
-        if st.button("CONTINUAR ➜", use_container_width=True):
-            st.session_state.profissional = profissional_escolhido
-            st.session_state.data = None
-            st.session_state.horario = None
-            ir_para(3)
+        if st.button("CONTINUAR →", use_container_width=True):
+            avancar_etapa()
             st.rerun()
-
 
 # ============================================================
 # ETAPA 3 — DATA E HORÁRIO
@@ -702,110 +734,108 @@ elif st.session_state.etapa == 2:
 
 elif st.session_state.etapa == 3:
 
-    st.markdown("## 📅 Escolha a data e o horário")
-
-    st.write(
-        "Selecione um dia e depois escolha um dos horários disponíveis."
+    st.markdown(
+        '<div class="step-indicator">ETAPA 3 DE 5 — DATA E HORÁRIO</div>',
+        unsafe_allow_html=True
     )
 
-    hoje = agora().date()
-    ultima_data = hoje + timedelta(days=DIAS_A_FRENTE)
+    st.markdown(
+        '<div class="section-title">📅 Escolha a data</div>',
+        unsafe_allow_html=True
+    )
 
-    dias_validos = [
-        hoje + timedelta(days=i)
-        for i in range(DIAS_A_FRENTE + 1)
-        if (
-            hoje + timedelta(days=i)
-        ).weekday() in PROFISSIONAIS[st.session_state.profissional]["dias"]
-    ]
+    hoje = date.today()
+    data_inicial = hoje
 
-    if not dias_validos:
-        st.warning("Não existem datas disponíveis.")
-        st.stop()
+    while data_inicial.weekday() not in PROFISSIONAIS[
+        st.session_state.profissional
+    ]["dias"]:
+        data_inicial += timedelta(days=1)
+
+    if data_inicial < hoje:
+        data_inicial = hoje
 
     data_escolhida = st.date_input(
         "Data do atendimento",
         value=(
-            st.session_state.data
-            if st.session_state.data in dias_validos
-            else dias_validos[0]
+            st.session_state.data_agendamento
+            if st.session_state.data_agendamento
+            else data_inicial
         ),
         min_value=hoje,
-        max_value=ultima_data,
+        max_value=hoje + timedelta(days=60),
+        format="DD/MM/YYYY",
         key="data_temp"
     )
 
-    profissional = st.session_state.profissional
-    _, duracao = calcular_valores(st.session_state.servicos)
+    st.session_state.data_agendamento = data_escolhida
 
-    horarios = []
+    dias_validos = PROFISSIONAIS[
+        st.session_state.profissional
+    ]["dias"]
 
-    if data_escolhida.weekday() not in PROFISSIONAIS[profissional]["dias"]:
-
-        st.warning("O profissional não atende nesta data.")
-
+    if data_escolhida.weekday() not in dias_validos:
+        st.warning("O profissional não atende aos domingos.")
+        horarios = []
     else:
+        valor, duracao = calcular_totais()
 
         try:
-            with st.spinner("Consultando disponibilidade..."):
-                reservas = buscar_reservas()
+            with st.spinner("Consultando horários disponíveis..."):
+                horarios = listar_horarios(
+                    data_escolhida,
+                    st.session_state.profissional,
+                    duracao
+                )
+        except Exception as erro:
+            horarios = []
+            st.error(f"Não foi possível consultar a agenda: {erro}")
 
-            horarios = horarios_livres(
-                data_escolhida,
-                profissional,
-                duracao,
-                reservas
-            )
-
-        except RuntimeError as erro:
-            st.error(str(erro))
-
-    horario_escolhido = None
+    st.markdown(
+        '<div class="section-title">🕒 Horários disponíveis</div>',
+        unsafe_allow_html=True
+    )
 
     if horarios:
+        horario_atual = st.session_state.hora_agendamento
 
-        st.success(f"{len(horarios)} horário(s) disponível(is).")
-
-        if (
-            st.session_state.horario in horarios
-            and st.session_state.data == data_escolhida
-        ):
-            indice_horario = horarios.index(st.session_state.horario)
-        else:
-            indice_horario = 0
+        indice_horario = (
+            horarios.index(horario_atual)
+            if horario_atual in horarios
+            else 0
+        )
 
         horario_escolhido = st.radio(
-            "Horários disponíveis",
+            "Selecione um horário",
             horarios,
             index=indice_horario,
-            horizontal=True,
-            key="horario_temp"
+            key="hora_temp",
+            horizontal=True
         )
 
-    elif data_escolhida.weekday() in PROFISSIONAIS[profissional]["dias"]:
+        st.session_state.hora_agendamento = horario_escolhido
 
-        st.warning(
-            "Não há horários disponíveis para essa combinação de serviços."
-        )
+    else:
+        st.session_state.hora_agendamento = ""
+        st.info("Não há horários disponíveis para essa data e duração.")
+
+    st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("← Voltar", use_container_width=True):
-            ir_para(2)
+        if st.button("← VOLTAR", use_container_width=True):
+            voltar_etapa()
             st.rerun()
 
     with col2:
         if st.button(
-            "CONTINUAR ➜",
-            use_container_width=True,
-            disabled=not horario_escolhido
+            "CONTINUAR →",
+            disabled=not st.session_state.hora_agendamento,
+            use_container_width=True
         ):
-            st.session_state.data = data_escolhida
-            st.session_state.horario = horario_escolhido
-            ir_para(4)
+            avancar_etapa()
             st.rerun()
-
 
 # ============================================================
 # ETAPA 4 — DADOS DO CLIENTE
@@ -813,52 +843,65 @@ elif st.session_state.etapa == 3:
 
 elif st.session_state.etapa == 4:
 
-    st.markdown("## 👤 Seus dados")
-
-    st.write(
-        "Informe seus dados para registrar o agendamento."
+    st.markdown(
+        '<div class="step-indicator">ETAPA 4 DE 5 — SEUS DADOS</div>',
+        unsafe_allow_html=True
     )
 
-    cliente = st.text_input(
+    st.markdown(
+        '<div class="section-title">👤 Dados do cliente</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="section-description">'
+        'Informe seus dados para concluir o agendamento.'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    nome = st.text_input(
         "Nome completo",
         value=st.session_state.cliente,
         placeholder="Digite seu nome",
-        key="cliente_temp"
+        key="nome_temp"
     )
 
     telefone = st.text_input(
         "Telefone / WhatsApp",
         value=st.session_state.telefone,
         placeholder="(31) 99999-9999",
-        max_chars=20,
         key="telefone_temp"
     )
+
+    st.session_state.cliente = nome
+    st.session_state.telefone = telefone
+
+    telefone_limpo = normalizar_telefone(telefone)
+
+    dados_validos = (
+        len(nome.strip()) >= 3
+        and len(telefone_limpo) >= 10
+        and len(telefone_limpo) <= 13
+    )
+
+    st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("← Voltar", use_container_width=True):
-            ir_para(3)
+        if st.button("← VOLTAR", use_container_width=True):
+            voltar_etapa()
             st.rerun()
 
     with col2:
         if st.button(
-            "CONTINUAR PARA RESUMO ➜",
+            "CONTINUAR →",
+            disabled=not dados_validos,
             use_container_width=True
         ):
-
-            if not cliente.strip():
-                st.error("Informe seu nome completo.")
-
-            elif not telefone_valido(telefone):
-                st.error("Informe um telefone válido com DDD.")
-
-            else:
-                st.session_state.cliente = cliente.strip()
-                st.session_state.telefone = telefone
-                ir_para(5)
-                st.rerun()
-
+            avancar_etapa()
+            st.rerun()
 
 # ============================================================
 # ETAPA 5 — RESUMO E CONFIRMAÇÃO
@@ -866,198 +909,133 @@ elif st.session_state.etapa == 4:
 
 elif st.session_state.etapa == 5:
 
-    st.markdown("## 🧾 Resumo do agendamento")
-
-    valor_total, duracao = calcular_valores(
-        st.session_state.servicos
+    st.markdown(
+        '<div class="step-indicator">ETAPA 5 DE 5 — CONFIRMAÇÃO</div>',
+        unsafe_allow_html=True
     )
 
-    servico = " + ".join(st.session_state.servicos)
+    st.markdown(
+        '<div class="section-title">📋 Resumo do agendamento</div>',
+        unsafe_allow_html=True
+    )
 
-    with st.container(border=True):
+    valor, duracao = calcular_totais()
 
-        st.markdown("### Serviços escolhidos")
+    data_formatada = st.session_state.data_agendamento.strftime(
+        "%d/%m/%Y"
+    )
 
-        for nome in st.session_state.servicos:
-            dados = SERVICOS[nome]
+    lista_servicos = "".join(
+        f"<li>{nome}</li>"
+        for nome in st.session_state.servicos_selecionados
+    )
 
-            st.write(
-                f"{dados['icone']} **{nome}** — "
-                f"{moeda(dados['preco'])}"
-            )
-
-        st.divider()
-
-        st.write(f"**Serviços:** {servico}")
-        st.write(f"**Profissional:** {st.session_state.profissional}")
-        st.write(f"**Data:** {st.session_state.data.strftime('%d/%m/%Y')}")
-        st.write(f"**Horário:** {st.session_state.horario}")
-        st.write(f"**Cliente:** {st.session_state.cliente}")
-        st.write(f"**Telefone:** {st.session_state.telefone}")
-        st.write(f"**Duração total:** {duracao} minutos")
-
-        st.markdown(
-            f"### :orange[Valor total: {moeda(valor_total)}]"
-        )
+    st.markdown(f"""
+    <div class="summary-card">
+        <h3>💈 BARBEARIA JOEL</h3>
+        <hr>
+        <b>Cliente:</b> {st.session_state.cliente}<br><br>
+        <b>Telefone:</b> {st.session_state.telefone}<br><br>
+        <b>Serviço(s):</b>
+        <ul>{lista_servicos}</ul>
+        <b>Profissional:</b> {st.session_state.profissional}<br><br>
+        <b>Data:</b> {data_formatada}<br><br>
+        <b>Horário:</b> {st.session_state.hora_agendamento}<br><br>
+        <b>Duração:</b> {duracao} minutos
+        <hr>
+        <div class="summary-total">Total: {dinheiro(valor)}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     if st.session_state.confirmado:
+        dados = st.session_state.confirmado
 
-        confirmado = st.session_state.confirmado
+        st.markdown("""
+        <div class="success-card">
+            <h2>✅ Agendamento registrado!</h2>
+            <p>Seu horário foi registrado com sucesso.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.success("🎉 Agendamento confirmado!")
-
-        mensagem_whatsapp = (
-            f"Olá! Meu agendamento na {NOME_BARBEARIA} "
-            f"foi registrado.\n\n"
-            f"Nome: {confirmado['cliente']}\n"
-            f"Serviços: {confirmado['servico']}\n"
-            f"Data: {confirmado['data']}\n"
-            f"Horário: {confirmado['horario']}\n"
-            f"Profissional: {confirmado['profissional']}\n"
-            f"Duração: {confirmado['duracao']} minutos\n"
-            f"Valor total: {moeda(confirmado['valor'])}"
+        link_whatsapp = montar_link_whatsapp(
+            dados["payload"],
+            dados["valor"],
+            dados["duracao"]
         )
 
         st.link_button(
-            "📲 CONTINUAR PELO WHATSAPP",
-            gerar_whatsapp(WHATSAPP_PADRAO, mensagem_whatsapp),
+            "📲 ENVIAR CONFIRMAÇÃO PELO WHATSAPP",
+            link_whatsapp,
             use_container_width=True
         )
 
-        if st.button("Fazer novo agendamento", use_container_width=True):
-            reiniciar()
+        if st.button("FAZER NOVO AGENDAMENTO", use_container_width=True):
+            reiniciar_agendamento()
+            st.rerun()
 
     else:
+        st.markdown('<div class="gold-line"></div>', unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("← Voltar aos dados", use_container_width=True):
-                ir_para(4)
+            if st.button("← VOLTAR", use_container_width=True):
+                voltar_etapa()
                 st.rerun()
 
         with col2:
-            confirmar = st.button(
-                "✅ CONFIRMAR AGENDAMENTO",
+            if st.button(
+                "CONFIRMAR AGENDAMENTO",
                 use_container_width=True
-            )
-
-        if confirmar:
-
-            buscar_reservas.clear()
-
-            try:
-                reservas_atualizadas = buscar_reservas()
-
-                horarios_atualizados = horarios_livres(
-                    st.session_state.data,
-                    st.session_state.profissional,
-                    duracao,
-                    reservas_atualizadas
-                )
-
-            except RuntimeError as erro:
-                st.error(str(erro))
-                horarios_atualizados = []
-
-            if st.session_state.horario not in horarios_atualizados:
-
-                st.error(
-                    "Este horário acabou de ser ocupado. "
-                    "Volte e escolha outro horário."
-                )
-
-            else:
-
-                with st.spinner("Registrando seu agendamento..."):
-
-                    sucesso, mensagem = salvar_agendamento(
-                        dia=st.session_state.data,
-                        horario=st.session_state.horario,
-                        profissional=st.session_state.profissional,
-                        cliente=st.session_state.cliente,
-                        servico=servico,
-                        telefone=st.session_state.telefone,
-                        duracao=duracao
+            ):
+                if not SCRIPT_URL:
+                    st.error(
+                        "Configure SCRIPT_URL nos Secrets do Streamlit."
                     )
-
-                if sucesso:
-
-                    buscar_reservas.clear()
-
-                    st.session_state.confirmado = {
-                        "cliente": st.session_state.cliente,
-                        "servico": servico,
-                        "profissional": st.session_state.profissional,
-                        "data": st.session_state.data.strftime("%d/%m/%Y"),
-                        "horario": st.session_state.horario,
-                        "duracao": duracao,
-                        "valor": valor_total
-                    }
-
-                    st.success("Agendamento registrado com sucesso!")
-
-                    st.rerun()
-
                 else:
-                    st.error(mensagem)
+                    try:
+                        with st.spinner("Confirmando seu agendamento..."):
+                            # Nova consulta antes de enviar.
+                            # O Apps Script também deve validar conflitos
+                            # dentro de LockService no momento da gravação.
+                            if not horario_disponivel(
+                                st.session_state.data_agendamento,
+                                st.session_state.hora_agendamento,
+                                duracao,
+                                st.session_state.profissional
+                            ):
+                                st.error(
+                                    "Esse horário acabou de ser ocupado. "
+                                    "Volte e escolha outro horário."
+                                )
+                            else:
+                                payload, valor_final, duracao_final = (
+                                    enviar_agendamento()
+                                )
 
+                                st.session_state.confirmado = {
+                                    "payload": payload,
+                                    "valor": valor_final,
+                                    "duracao": duracao_final
+                                }
 
-# ============================================================
-# INFORMAÇÕES FIXAS
-# ============================================================
+                                st.rerun()
 
-st.divider()
-
-col_info1, col_info2 = st.columns(2)
-
-with col_info1:
-
-    with st.container(border=True):
-
-        st.markdown("### Reserve seu horário")
-
-        st.write(
-            "Reserve seu horário de forma rápida e prática."
-        )
-
-    with st.container(border=True):
-
-        st.markdown("## 💈 Nossa missão")
-
-        st.write(
-            "Oferecer qualidade, estilo e cuidado em cada atendimento."
-        )
-
-        st.write(
-            "Seu bem-estar e sua satisfação são nossa prioridade!"
-        )
-
-with col_info2:
-
-    with st.container(border=True):
-
-        st.markdown("## ◷ Horário de Atendimento")
-
-        st.markdown("**Segunda a sábado**")
-
-        st.markdown("### :orange[09h às 19h]")
-
-        st.caption(
-            "Intervalo para almoço: 12h às 13h."
-        )
-
+                    except Exception as erro:
+                        st.error(f"Erro ao confirmar o agendamento: {erro}")
 
 # ============================================================
-# RODAPÉ
+# RODAPÉ SIMPLES
 # ============================================================
-
-st.divider()
 
 st.markdown("""
-<div class="footer">
-    <strong style="color:#eab344;">BARBEARIA JOEL</strong><br>
-    ESTILO • CONFIANÇA • BEM-ESTAR<br><br>
-    © 2026 Barbearia Joel — Todos os direitos reservados.
+<div style="
+    text-align:center;
+    color:#999999;
+    font-size:11px;
+    margin-top:35px;
+    padding-top:15px;
+    border-top:1px solid #333333;">
+    💈 BARBEARIA JOEL
 </div>
 """, unsafe_allow_html=True)
