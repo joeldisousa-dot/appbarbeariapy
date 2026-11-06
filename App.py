@@ -23,6 +23,7 @@ except Exception:
     SCRIPT_URL = ""
 
 WHATSAPP_PADRAO = "5531999999999"  # Substitua pelo número real
+
 NOME_SISTEMA = "BARBEARIA JOEL"
 
 PROFISSIONAIS = {
@@ -69,7 +70,7 @@ SERVICOS = {
 }
 
 # ============================================================
-# CSS
+# ESTILIZAÇÃO
 # ============================================================
 
 st.markdown("""
@@ -94,6 +95,8 @@ header[data-testid="stHeader"] {
     padding-top: 1.5rem;
     padding-bottom: 3rem;
 }
+
+/* CABEÇALHO */
 
 .brand {
     text-align: center;
@@ -127,6 +130,8 @@ header[data-testid="stHeader"] {
     margin-top: 15px;
 }
 
+/* TÍTULOS */
+
 .section-title {
     color: #eab344;
     font-size: 22px;
@@ -139,6 +144,17 @@ header[data-testid="stHeader"] {
     font-size: 13px;
     margin-bottom: 20px;
 }
+
+.step-indicator {
+    color: #eab344;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    margin: 12px 0 20px;
+    letter-spacing: 1px;
+}
+
+/* CARTÕES DE SERVIÇOS */
 
 .service-card {
     background: #ffffff;
@@ -176,20 +192,30 @@ header[data-testid="stHeader"] {
     margin-top: 8px;
 }
 
-.step-indicator {
-    color: #eab344;
-    font-size: 12px;
-    font-weight: 700;
-    text-align: center;
-    margin: 12px 0 20px;
-    letter-spacing: 1px;
+/* INDICADORES DE VALOR E DURAÇÃO */
+
+div[data-testid="stMetric"] {
+    background: #242424;
+    border: 1px solid #b88a32;
+    border-radius: 10px;
+    padding: 12px;
 }
 
-.gold-line {
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #eab344, transparent);
-    margin: 15px 0 22px;
+div[data-testid="stMetric"] label {
+    color: #eab344 !important;
+    font-weight: 700 !important;
 }
+
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+}
+
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
+    color: #eab344 !important;
+}
+
+/* RESUMO */
 
 .summary-card {
     background: #ffffff;
@@ -210,6 +236,8 @@ header[data-testid="stHeader"] {
     font-weight: 800;
 }
 
+/* CONFIRMAÇÃO */
+
 .success-card {
     background: #ffffff;
     color: #000000 !important;
@@ -223,6 +251,8 @@ header[data-testid="stHeader"] {
     color: #000000 !important;
 }
 
+/* BOTÕES */
+
 div.stButton > button {
     background: #eab344;
     color: #111111 !important;
@@ -230,6 +260,7 @@ div.stButton > button {
     border-radius: 8px;
     font-weight: 800;
     min-height: 43px;
+    transition: 0.2s;
 }
 
 div.stButton > button:hover {
@@ -242,6 +273,8 @@ div.stButton > button:disabled {
     background: #555555;
     color: #cccccc !important;
 }
+
+/* CAMPOS BRANCOS */
 
 .stTextInput input,
 .stDateInput input,
@@ -258,9 +291,34 @@ div[data-baseweb="select"] > div {
     color: #ffffff !important;
 }
 
-.stRadio div[role="radiogroup"] label {
-    color: #ffffff !important;
+/* BOTÕES DE OPÇÃO DOS HORÁRIOS */
+
+div[role="radiogroup"] {
+    gap: 10px !important;
 }
+
+div[role="radiogroup"] label {
+    background: #292929;
+    border: 1px solid #b88a32;
+    border-radius: 8px;
+    padding: 9px 14px;
+    margin: 3px;
+}
+
+div[role="radiogroup"] label p {
+    color: #ffffff !important;
+    font-weight: 700;
+}
+
+div[role="radiogroup"] label:has(input:checked) {
+    background: #eab344;
+}
+
+div[role="radiogroup"] label:has(input:checked) p {
+    color: #111111 !important;
+}
+
+/* ALERTAS E DIVISÓRIAS */
 
 div[data-testid="stAlert"] {
     color: #000000 !important;
@@ -268,6 +326,12 @@ div[data-testid="stAlert"] {
 
 div[data-testid="stAlert"] p {
     color: #000000 !important;
+}
+
+.gold-line {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #eab344, transparent);
+    margin: 15px 0 22px;
 }
 
 hr {
@@ -334,10 +398,6 @@ def converter_hora(hora_texto):
     return datetime.strptime(hora_texto, "%H:%M").time()
 
 
-def hoje_data():
-    return date.today()
-
-
 # ============================================================
 # CONSULTA AO GOOGLE SHEETS
 # ============================================================
@@ -392,7 +452,7 @@ def listar_horarios(data_escolhida, profissional, duracao):
     if data_escolhida.weekday() not in configuracao["dias"]:
         return []
 
-    # Apenas UMA consulta à agenda.
+    # Consulta a agenda uma única vez.
     reservas = buscar_reservas()
 
     abertura = converter_hora(configuracao["inicio"])
@@ -430,7 +490,6 @@ def listar_horarios(data_escolhida, profissional, duracao):
 
     reservas_ocupadas = []
 
-    # Organiza as reservas existentes em memória.
     for reserva in reservas:
 
         if not isinstance(reserva, dict):
@@ -479,10 +538,8 @@ def listar_horarios(data_escolhida, profissional, duracao):
             continue
 
     horarios = []
-
     atual = inicio_expediente
 
-    # Gera horários de 30 em 30 minutos.
     while atual + timedelta(minutes=duracao) <= fim_expediente:
 
         fim_atendimento = atual + timedelta(
@@ -490,7 +547,7 @@ def listar_horarios(data_escolhida, profissional, duracao):
         )
 
         horario_passado = (
-            data_escolhida == hoje_data()
+            data_escolhida == date.today()
             and atual <= agora
         )
 
@@ -563,10 +620,7 @@ def enviar_agendamento():
 
     sucesso = retorno.get(
         "sucesso",
-        retorno.get(
-            "success",
-            retorno.get("ok")
-        )
+        retorno.get("success", retorno.get("ok"))
     )
 
     if sucesso is not True:
@@ -583,7 +637,6 @@ def enviar_agendamento():
 
         raise Exception(mensagem)
 
-    # Atualiza o cache para não manter o horário como disponível.
     buscar_reservas.clear()
 
     return payload, valor, duracao
@@ -630,20 +683,22 @@ def reiniciar_agendamento():
     for chave, valor in ESTADOS_INICIAIS.items():
         st.session_state[chave] = valor
 
-    chaves_temporarias = [
-        "data_temp",
-        "profissional_temp",
-        "nome_temp",
-        "telefone_temp"
-    ]
-
-    for chave in list(st.session_state.keys()):
+    chaves_para_limpar = [
+        chave for chave in list(st.session_state.keys())
         if (
-            chave in chaves_temporarias
+            chave in [
+                "data_temp",
+                "profissional_temp",
+                "nome_temp",
+                "telefone_temp"
+            ]
             or chave.startswith("horario_")
             or chave.startswith("servico_")
-        ):
-            del st.session_state[chave]
+        )
+    ]
+
+    for chave in chaves_para_limpar:
+        del st.session_state[chave]
 
 
 # ============================================================
@@ -727,13 +782,9 @@ if st.session_state.etapa == 1:
                 ):
 
                     if selecionado:
-                        st.session_state.servicos_selecionados.remove(
-                            nome
-                        )
+                        st.session_state.servicos_selecionados.remove(nome)
                     else:
-                        st.session_state.servicos_selecionados.append(
-                            nome
-                        )
+                        st.session_state.servicos_selecionados.append(nome)
 
                     st.rerun()
 
@@ -829,19 +880,13 @@ elif st.session_state.etapa == 2:
 
     with col1:
 
-        if st.button(
-            "← VOLTAR",
-            use_container_width=True
-        ):
+        if st.button("← VOLTAR", use_container_width=True):
             st.session_state.etapa = 1
             st.rerun()
 
     with col2:
 
-        if st.button(
-            "CONTINUAR →",
-            use_container_width=True
-        ):
+        if st.button("CONTINUAR →", use_container_width=True):
             st.session_state.profissional = profissional
             st.session_state.etapa = 3
             st.rerun()
@@ -921,7 +966,7 @@ elif st.session_state.etapa == 3:
                 f"Não foi possível consultar a agenda: {erro}"
             )
 
-    # Cada data possui uma chave própria para o horário.
+    # Chave exclusiva para cada data.
     chave_horario = (
         f"horario_{data_escolhida.strftime('%Y%m%d')}"
     )
@@ -937,25 +982,21 @@ elif st.session_state.etapa == 3:
         if horario_anterior not in horarios:
             horario_anterior = None
 
-        # Selectbox sem seleção automática.
-        # O cliente precisa escolher um horário.
-        opcoes_horario = ["Selecione um horário"] + horarios
+        st.markdown("**Selecione um horário disponível:**")
 
-        indice_horario = (
-            opcoes_horario.index(horario_anterior)
-            if horario_anterior in horarios
-            else 0
+        # HORÁRIOS COMO BOTÕES DE OPÇÃO.
+        horario_escolhido = st.radio(
+            "Horários disponíveis",
+            options=horarios,
+            index=(
+                horarios.index(horario_anterior)
+                if horario_anterior in horarios
+                else None
+            ),
+            horizontal=True,
+            key=chave_horario,
+            label_visibility="collapsed"
         )
-
-        selecao = st.selectbox(
-            "Selecione um horário disponível:",
-            options=opcoes_horario,
-            index=indice_horario,
-            key=chave_horario
-        )
-
-        if selecao != "Selecione um horário":
-            horario_escolhido = selecao
 
         st.session_state.hora_agendamento = (
             horario_escolhido or ""
@@ -993,14 +1034,11 @@ elif st.session_state.etapa == 3:
             use_container_width=True
         ):
 
-            # Lê o valor diretamente do componente.
-            horario_final = st.session_state.get(
-                chave_horario
-            )
+            # Recupera diretamente o horário escolhido.
+            horario_final = st.session_state.get(chave_horario)
 
             if (
                 not horario_final
-                or horario_final == "Selecione um horário"
                 or horario_final not in horarios
             ):
 
@@ -1013,7 +1051,7 @@ elif st.session_state.etapa == 3:
                 st.session_state.data_agendamento = data_escolhida
                 st.session_state.hora_agendamento = horario_final
 
-                # Avança diretamente para a etapa 4.
+                # Avança para a etapa dos dados do cliente.
                 st.session_state.etapa = 4
 
                 st.rerun()
@@ -1075,10 +1113,7 @@ elif st.session_state.etapa == 4:
 
     with col1:
 
-        if st.button(
-            "← VOLTAR",
-            use_container_width=True
-        ):
+        if st.button("← VOLTAR", use_container_width=True):
             st.session_state.etapa = 3
             st.rerun()
 
@@ -1089,6 +1124,7 @@ elif st.session_state.etapa == 4:
             disabled=not dados_validos,
             use_container_width=True
         ):
+
             st.session_state.cliente = nome.strip()
             st.session_state.telefone = telefone
             st.session_state.etapa = 5
@@ -1171,6 +1207,7 @@ elif st.session_state.etapa == 5:
             "FAZER NOVO AGENDAMENTO",
             use_container_width=True
         ):
+
             reiniciar_agendamento()
             st.rerun()
 
@@ -1189,6 +1226,7 @@ elif st.session_state.etapa == 5:
                 "← VOLTAR",
                 use_container_width=True
             ):
+
                 st.session_state.etapa = 4
                 st.rerun()
 
@@ -1210,8 +1248,7 @@ elif st.session_state.etapa == 5:
                         "Verificando disponibilidade e confirmando..."
                     ):
 
-                        # Atualiza a consulta para verificar se o horário
-                        # continua disponível antes do envio.
+                        # Atualiza a consulta antes da confirmação.
                         buscar_reservas.clear()
 
                         horarios_atualizados = listar_horarios(
